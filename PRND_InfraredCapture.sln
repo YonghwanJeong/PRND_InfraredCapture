@@ -1,0 +1,37 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.13.35806.99
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PRND_InfraredCapture", "PRND_InfraredCapture\PRND_InfraredCapture.csproj", "{C4297031-CC6B-4682-9D31-99B228510DC2}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CP.Common", "CP.Common\CP.Common.csproj", "{FC9FBC59-8D4F-4A46-82E3-3CDA2B286E17}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CP.Controls", "CP.Controls\CP.Controls.csproj", "{6DCCDDE5-EF97-4711-B5FF-D2EC86F447F2}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x64 = Debug|x64
+		Release|x64 = Release|x64
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{C4297031-CC6B-4682-9D31-99B228510DC2}.Debug|x64.ActiveCfg = Debug|x64
+		{C4297031-CC6B-4682-9D31-99B228510DC2}.Debug|x64.Build.0 = Debug|x64
+		{C4297031-CC6B-4682-9D31-99B228510DC2}.Release|x64.ActiveCfg = Release|x64
+		{C4297031-CC6B-4682-9D31-99B228510DC2}.Release|x64.Build.0 = Release|x64
+		{FC9FBC59-8D4F-4A46-82E3-3CDA2B286E17}.Debug|x64.ActiveCfg = Debug|x64
+		{FC9FBC59-8D4F-4A46-82E3-3CDA2B286E17}.Debug|x64.Build.0 = Debug|x64
+		{FC9FBC59-8D4F-4A46-82E3-3CDA2B286E17}.Release|x64.ActiveCfg = Release|x64
+		{FC9FBC59-8D4F-4A46-82E3-3CDA2B286E17}.Release|x64.Build.0 = Release|x64
+		{6DCCDDE5-EF97-4711-B5FF-D2EC86F447F2}.Debug|x64.ActiveCfg = Debug|x64
+		{6DCCDDE5-EF97-4711-B5FF-D2EC86F447F2}.Debug|x64.Build.0 = Debug|x64
+		{6DCCDDE5-EF97-4711-B5FF-D2EC86F447F2}.Release|x64.ActiveCfg = Release|x64
+		{6DCCDDE5-EF97-4711-B5FF-D2EC86F447F2}.Release|x64.Build.0 = Release|x64
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {FF83C02E-1C54-41EF-8535-49AE64280444}
+	EndGlobalSection
+EndGlobal

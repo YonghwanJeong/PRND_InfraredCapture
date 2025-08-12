@@ -1,0 +1,6 @@
+[submodule "CP.Controls"]
+	path = CP.Controls
+	url = git@github.com:YonghwanJeong/CP.Controls.git
+[submodule "CP.Common"]
+	path = CP.Common
+	url = git@github.com:YonghwanJeong/CP.Common.git
