@@ -15,7 +15,8 @@ namespace OptrisCam
         private CancellationTokenSource _imageLoopCts;
         private Task _imageLoopTask;
         private DateTime _lastUpdateTime;
-        private IRImagerShow imagerShow = new();
+        private IRImagerShow imagerShow = new(@"C:\Users\jijon\AppData\Roaming\Imager\Configs\25074286.xml");
+        
 
         int tickCount = 0;
 
@@ -32,7 +33,7 @@ namespace OptrisCam
             try
             {
                 imagerShow.Disconnect();
-                imagerShow.Connect(@"C:\Users\jijon\AppData\Roaming\Imager\Configs\25074286.xml");
+                imagerShow.Connect();
             }
             catch (SDKException ex)
             {

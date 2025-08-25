@@ -82,6 +82,7 @@ namespace OptrisCam.models
         private ThermalFrame thermalFrame = new();
         private FramerateCounter counter = new();
         private string flagState = "";
+        private string _ConfigFilePath;
 
         public bool IsConnected { get; private set; }
         public bool IsConnectionLost { get; private set; }
@@ -91,7 +92,7 @@ namespace OptrisCam.models
         private readonly ByteChangeDetector detector = new ByteChangeDetector();
 
         /// <summary>Constructor</summary>
-        public IRImagerShow()
+        public IRImagerShow(string configFilePath)
         {
             // Instantiate an imager object. It will serve as the main interface to the SDK
             Imager = IRImagerFactory.getInstance().create("native");
@@ -118,12 +119,13 @@ namespace OptrisCam.models
 
             IsConnected = false;
             IsConnectionLost = false;
+            _ConfigFilePath = configFilePath;
         }
 
         /// <summary>Connects to the device specified in the configuration file.</summary>
         /// 
         /// <param name="configFile">path to the configuration files of the device to connect to.</param>
-        public void Connect(string configFile)
+        public void Connect()
         {
             if (IsConnected)
             {
@@ -131,7 +133,7 @@ namespace OptrisCam.models
             }
 
             // Read the configuration file and initialize the imager with it
-            IRImagerConfig config = IRImagerConfigReader.read(configFile);
+            IRImagerConfig config = IRImagerConfigReader.read(_ConfigFilePath);
             Imager.connect(config);
 
             // Start processing
@@ -141,23 +143,6 @@ namespace OptrisCam.models
             IsConnectionLost = false;
         }
 
-        /// <summary>Quickly connects to the first detected device on the USB port.</summary>
-        public void QuickConnect()
-        {
-            if (IsConnected)
-            {
-                return;
-            }
-
-            // The serial number 0 servers as a wild card to connect to the first available device.
-            Imager.connect(0);
-
-            // Start processing
-            Imager.runAsync();
-
-            IsConnected = true;
-            IsConnectionLost = false;
-        }
 
         /// <summary>Disconnects from the currently connected device.</summary>
         public void Disconnect()
@@ -222,7 +207,6 @@ namespace OptrisCam.models
                 }
 
                 imageBuilder.setThermalFrame(thermalFrame);
-
             }
 
             // Convert the thermal frame to a false color image
@@ -231,6 +215,7 @@ namespace OptrisCam.models
             // Extract the image data...
             int width = imageBuilder.getWidth();
             int height = imageBuilder.getHeight();
+            
 
             // The image size in bytes may not equal width * height due to width padding
             byte[] image = new byte[imageBuilder.getImageSizeInBytes()];
