@@ -1,11 +1,7 @@
 ﻿using OptrisCam.models;
-using System;
-using System.Collections.Generic;
-using System.Drawing.Imaging;
+using OptrisCam;
 using System.Drawing;
-using System.Runtime.InteropServices.ComTypes;
-using System.Text;
-using System.Threading;
+
 using Optris.OtcSDK;
 
 namespace OptrisCam
@@ -40,14 +36,19 @@ namespace OptrisCam
                 Console.WriteLine($"error {ex.Message}");
             }
         }
-        private void Disconnect()
+
+        public void CaptureImage(int framecnt, string savePath)
+        {
+            imagerShow.StartImageCapture(framecnt, savePath);
+        }
+        public void Disconnect()
         {
             if (!imagerShow.IsConnected)
             {
                 return;
             }
             imagerShow.Disconnect();
-            StopImageLoop();
+            
         }
 
         public void StartImageLoop()
@@ -73,7 +74,7 @@ namespace OptrisCam
                     Bitmap? image = null;
                     try
                     {
-                        image = imagerShow.GetImage();
+                        //image = imagerShow.GetImage();
                         OnReceiveImageAction?.Invoke(image);
                     }
                     catch

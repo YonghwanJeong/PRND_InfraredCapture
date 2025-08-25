@@ -1,6 +1,5 @@
 ﻿using CommunityToolkit.Mvvm.Input;
 using CP.Common;
-using CP.Common.Util;
 using OptrisCam;
 using PRND_InfraredCapture.Bases;
 using System;
@@ -53,7 +52,10 @@ namespace PRND_InfraredCapture.ViewModels
         }
 
 
-        public ICommand TestCommand { get; set; }
+        //public ICommand TestCommand { get; set; }
+        public ICommand ConnectCommnad { get; set; }
+        public ICommand CaptureImageCommand { get; set; }
+        public ICommand DisConnectCommand { get; set; }
         public ICommand PageLoadedCommmand { get; set; }
 
         
@@ -67,9 +69,10 @@ namespace PRND_InfraredCapture.ViewModels
         public HomeViewModel()
         {
             Title = "Home";
-            TestCommand = new RelayCommand(OnTestCommand);
+            ConnectCommnad = new RelayCommand(OnConnectCommand);
+            CaptureImageCommand = new RelayCommand(OnCaptureImageCommand);
             PageLoadedCommmand = new RelayCommand(OnPageLoaded);
-
+            DisConnectCommand = new RelayCommand(OnDisconnectCommand);
             if (_IsFirstLoaded) Initialize();
 
 
@@ -77,6 +80,16 @@ namespace PRND_InfraredCapture.ViewModels
             _Controller.OnReceiveImageAction += OnImageReceived;
             _Controller.OnUpdateGrabCount += OnUpdateGrabCount;
 
+        }
+
+        private void OnDisconnectCommand()
+        {
+            _Controller.Disconnect();
+        }
+
+        private void OnCaptureImageCommand()
+        {
+            _Controller.CaptureImage(80, @"C:\TestFile\250825");
         }
 
         private void OnUpdateGrabCount(int obj)
@@ -91,8 +104,8 @@ namespace PRND_InfraredCapture.ViewModels
         {
             Application.Current.Dispatcher.BeginInvoke(new Action(() =>
             {
-                //if(bitmap!=null)
-                //    TestImage = BitmapController.BitmapToBitmapSource(bitmap);
+                if (bitmap != null)
+                    TestImage = BitmapController.BitmapToBitmapSource(bitmap);
             }));
         }
 
@@ -111,39 +124,10 @@ namespace PRND_InfraredCapture.ViewModels
             TestImage = BitmapController.LoadBitmapImage(@"C:\Users\jijon\Work\2. Development\PRND_InfraredCapture\PRND_InfraredCapture\Resources\CustomAir_Cylinder.bmp");
         }
 
-        private void OnTestCommand()
+        private void OnConnectCommand()
         {
             _Controller.Connect();
-            _Controller.StartImageLoop();
-            //Task _imageLoopTask = Task.Run(async () =>
-            //{
-            //    while (true)
-            //    {
-            //        tickCount++;
-            //        // 1초마다 실행되는 블록
-            //        var now = DateTime.UtcNow;
-            //        if ((now - _lastUpdateTime).TotalSeconds >= 1)
-            //        {
-            //            var ticksInSec = tickCount;
-            //            tickCount = 0;
-            //            _lastUpdateTime = now;
-            //            try
-            //            {
-
-            //                _ = Application.Current.Dispatcher.BeginInvoke(new Action(() =>
-            //                {
-            //                    ProgramLogs.Add($"초당 GrabCount : {ticksInSec}");
-            //                }));
-
-            //            }
-            //            catch { /* 폼 종료 중 예외 무시 */ }
-
-            //        }
-            //        await Task.Delay(1);
-
-
-            //    }
-            //});
+            //_Controller.StartImageLoop();
         }
 
         public override Task OnNavigatedFromAsync()

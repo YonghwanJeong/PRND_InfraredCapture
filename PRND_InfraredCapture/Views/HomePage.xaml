@@ -21,7 +21,11 @@
             <RowDefinition Height="*"/>
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
-        <Button Content="Test Button" Command="{Binding TestCommand}"/>
+        <StackPanel>
+            <Button Content="Conect" Command="{Binding ConnectCommnad}"/>
+            <Button Content="Capture" Command="{Binding CaptureImageCommand}"/>
+            <Button Content="DisConnect" Command="{Binding DisConnectCommand}"/>
+        </StackPanel>
         <controls:ImagePanel Grid.Row="1" ImageSource="{Binding TestImage}" Height="400"/>
         <GroupBox Grid.Row="2" Header="Program Log" Margin="5" >
             <ListBox BorderThickness="1" ItemsSource="{Binding ProgramLogs, Mode=OneWay}"  Margin="5" FontSize="4" >

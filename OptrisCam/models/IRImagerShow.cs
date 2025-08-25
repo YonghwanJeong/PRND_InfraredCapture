@@ -1,72 +1,20 @@
 ﻿using Optris.OtcSDK;
+using System;
+using System.Collections.Concurrent;
 using System.Drawing;
 using System.Drawing.Imaging;
+using System.Security.Cryptography;
 
 
 namespace OptrisCam.models
 {
-    public sealed class ByteChangeDetector
+    public sealed class CapturedFrame
     {
-        private byte[] _prev = Array.Empty<byte>();
-        private ulong _prevHash = 0UL;
-
-        // 변경되었으면 onChanged(data) 호출하고 true 반환
-        public bool TryHandleIfChanged(byte[] data, Action<byte[]> onChanged)
-        {
-            if (data == null) return false;
-
-            // 길이 다르면 무조건 변경
-            if (data.Length != _prev.Length)
-            {
-                onChanged(data);
-                SaveSnapshot(data);
-                return true;
-            }
-
-            // 해시 계산(빠름)
-            ulong h = Fnv1a64(data);
-
-            if (h != _prevHash)
-            {
-                onChanged(data);
-                SaveSnapshot(data, h);
-                return true;
-            }
-
-            // 드물지만 해시 충돌/동일참조 대비: 실제 바이트 비교
-            if (!_prev.SequenceEqual(data))
-            {
-                onChanged(data);
-                SaveSnapshot(data, h);
-                return true;
-            }
-
-            return false; // 완전히 동일 → 스킵
-        }
-
-        private void SaveSnapshot(byte[] src, ulong? hashOpt = null)
-        {
-            if (_prev.Length != src.Length) _prev = new byte[src.Length];
-            Buffer.BlockCopy(src, 0, _prev, 0, src.Length);
-            _prevHash = hashOpt ?? Fnvlazy(src);
-        }
-
-        private ulong Fnvlazy(byte[] data) => Fnv1a64(data);
-
-        // 64-bit FNV-1a (빠르고 단순)
-        private static ulong Fnv1a64(byte[] data)
-        {
-            const ulong offset = 14695981039346656037UL;
-            const ulong prime = 1099511628211UL;
-            ulong hash = offset;
-            for (int i = 0; i < data.Length; i++)
-            {
-                hash ^= data[i];
-                hash *= prime;
-            }
-            return hash;
-        }
+        public ThermalFrame Frame { get; set; }
+        public FrameMetadata Meta { get; set; }
+        public DateTime Timestamp { get; set; }
     }
+
     /// <summary>
     /// A more feature rich implementation of an IRImagerClient that converts thermal frames to false color images and
     /// displays them.
@@ -79,17 +27,26 @@ namespace OptrisCam.models
         public IRImager Imager { get; private set; }
 
         private ImageBuilder imageBuilder;
-        private ThermalFrame thermalFrame = new();
-        private FramerateCounter counter = new();
         private string flagState = "";
         private string _ConfigFilePath;
+        private string _SaveFolderPath = "";
 
         public bool IsConnected { get; private set; }
         public bool IsConnectionLost { get; private set; }
 
         public int GrabCount { get; set; } = 0;
 
-        private readonly ByteChangeDetector detector = new ByteChangeDetector();
+
+        //80프레임을 얻기 위한 변수
+        private ConcurrentQueue<CapturedFrame> _FrameQueue = new ConcurrentQueue<CapturedFrame>();
+        private static int _RemainingFrameCount = 0;
+
+
+        private CancellationTokenSource _GetThermalDataCts;
+        private Task _GetThermalDataTask;
+
+        // ===== Debug counters & completion signal =====
+        private readonly ManualResetEventSlim _burstDone = new(false); // 80장 수집 완료 신호
 
         /// <summary>Constructor</summary>
         public IRImagerShow(string configFilePath)
@@ -116,10 +73,12 @@ namespace OptrisCam.models
              */
             imageBuilder = new ImageBuilder(ColorFormat.BGR, WidthAlignment.FourBytes);
             imageBuilder.setPaletteScalingMethod(PaletteScalingMethod.MinMax);
+            
 
             IsConnected = false;
             IsConnectionLost = false;
             _ConfigFilePath = configFilePath;
+
         }
 
         /// <summary>Connects to the device specified in the configuration file.</summary>
@@ -135,9 +94,10 @@ namespace OptrisCam.models
             // Read the configuration file and initialize the imager with it
             IRImagerConfig config = IRImagerConfigReader.read(_ConfigFilePath);
             Imager.connect(config);
-
             // Start processing
-            Imager.runAsync();
+            //Imager.runAsync();
+            _GetThermalDataCts = new CancellationTokenSource();
+            _GetThermalDataTask = Task.Run(() => GetThermalDataAsync(_GetThermalDataCts.Token));
 
             IsConnected = true;
             IsConnectionLost = false;
@@ -145,15 +105,46 @@ namespace OptrisCam.models
 
 
         /// <summary>Disconnects from the currently connected device.</summary>
-        public void Disconnect()
+        public async void Disconnect()
         {
             if (IsConnected)
             {
-                Imager.disconnect();
-
-                IsConnected = false;
-                IsConnectionLost = false;
+                try
+                {
+                    // Stop camera if running
+                    try { Imager.stopRunning(); } catch { /* ignore */ }
+                    Imager.disconnect();
+                }
+                finally
+                {
+                    IsConnected = false;
+                    IsConnectionLost = false;
+                    if (_GetThermalDataCts != null)
+                    {
+                        _GetThermalDataCts.Cancel();
+                        try { await _GetThermalDataTask; } catch { }
+                        _GetThermalDataCts.Dispose();
+                    }
+                }
             }
+        }
+
+        public async void StartImageCapture(int frameCount, string savePath)
+        {
+            if (!IsConnected)
+                return;
+            _SaveFolderPath = savePath;
+            CamLogger.Instance.Print(CamLogger.LogLevel.INFO, $"{DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff")} : Start Capture");
+            Imager.runAsync();
+            await Task.Delay(1000);
+            // reset state
+            _burstDone.Reset();
+            _FrameQueue = new ConcurrentQueue<CapturedFrame>();
+
+            Volatile.Write(ref _RemainingFrameCount, frameCount);
+
+            // Start camera acquisition
+            
         }
 
         /// <summary>Returns the type of the device.</summary>
@@ -183,65 +174,6 @@ namespace OptrisCam.models
             }
         }
 
-        /// <summary>Returns the current frame rate in Hz.</summary>
-        /// 
-        /// <return> current frame rate in Hz.</return>
-        public double GetFPS()
-        {
-            lock (thermalFrame)
-            {
-                return Math.Round(counter.getFps(), 1);
-            }
-        }
-
-        /// <summary>Converts the latest thermal frame into a false color image and returns it.</summary>
-        /// 
-        /// <return>converted false color image.</return>
-        public Bitmap? GetImage()
-        {
-            lock (thermalFrame)
-            {
-                if (thermalFrame.isEmpty())
-                {
-                    return null;
-                }
-
-                imageBuilder.setThermalFrame(thermalFrame);
-            }
-
-            // Convert the thermal frame to a false color image
-            imageBuilder.convertTemperatureToPaletteImage();
-
-            // Extract the image data...
-            int width = imageBuilder.getWidth();
-            int height = imageBuilder.getHeight();
-            
-
-            // The image size in bytes may not equal width * height due to width padding
-            byte[] image = new byte[imageBuilder.getImageSizeInBytes()];
-            imageBuilder.copyImageDataTo(image, image.Length);
-
-            Bitmap result = null;
-
-            detector.TryHandleIfChanged(image, changed =>
-            {
-                // 데이터가 바뀐 경우에만 실행할 로직
-                // 예: CSV 저장, 처리 파이프라인 투입, 화면 갱신 등
-                
-                // .. and create a bitmap
-                System.Drawing.Rectangle rectangle = new System.Drawing.Rectangle(0, 0, width, height);
-                Bitmap bitmap = new Bitmap(width, height, System.Drawing.Imaging.PixelFormat.Format24bppRgb);
-
-                BitmapData bitmapData = bitmap.LockBits(rectangle, ImageLockMode.ReadWrite, bitmap.PixelFormat);
-                System.Runtime.InteropServices.Marshal.Copy(image, 0, bitmapData.Scan0, image.Length);
-                bitmap.UnlockBits(bitmapData);
-                result = bitmap;
-            });
-
-            return result;
-        }
-
-
         // Callbacks
         /// <summary>Callback method triggered by imager when a new thermal frame is available.</summary>
         /// 
@@ -249,11 +181,112 @@ namespace OptrisCam.models
         /// <param name="meta">data of the thermal frame.</param>
         public override void onThermalFrame(ThermalFrame thermal, FrameMetadata meta)
         {
-            lock (thermalFrame)
+
+            // Burst logic
+            int before = Volatile.Read(ref _RemainingFrameCount);
+            if (before > 0)
             {
-                thermalFrame = thermal.clone();
-                counter.trigger();
-                GrabCount++;
+                // Enqueue only while we still need frames
+                var cloned = thermal.clone();
+                _FrameQueue.Enqueue(new CapturedFrame
+                {
+                    Frame = cloned,
+                    Meta = meta,
+                    Timestamp = DateTime.Now
+                });
+
+                // Count this frame toward the target
+                int after = Interlocked.Decrement(ref _RemainingFrameCount);
+
+                // If we've reached the target, stop the camera and signal completion
+                if (after == 0)
+                {
+                    _burstDone.Set();
+                    CamLogger.Instance.Print(CamLogger.LogLevel.INFO, $"{DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff")} : [BURST] complete -> + signal done");
+                }
+            }
+        }
+        private async Task GetThermalDataAsync(CancellationToken token)
+        {
+            while (!token.IsCancellationRequested)
+            {
+                if (_FrameQueue.TryDequeue(out var frame))
+                {
+                    // Process & save (example: BMP)
+                    imageBuilder.setThermalFrame(frame.Frame);
+                    imageBuilder.convertTemperatureToPaletteImage();
+
+                    int width = imageBuilder.getWidth();
+                    int height = imageBuilder.getHeight();
+
+                    byte[] image = new byte[imageBuilder.getImageSizeInBytes()];
+                    imageBuilder.copyImageDataTo(image, image.Length);
+
+                    var rectangle = new System.Drawing.Rectangle(0, 0, width, height);
+                    using var bitmap = new Bitmap(width, height, System.Drawing.Imaging.PixelFormat.Format24bppRgb);
+                    var bitmapData = bitmap.LockBits(rectangle, ImageLockMode.ReadWrite, bitmap.PixelFormat);
+                    System.Runtime.InteropServices.Marshal.Copy(image, 0, bitmapData.Scan0, image.Length);
+                    bitmap.UnlockBits(bitmapData);
+                    
+                    string time = $"{frame.Timestamp:yyyy-MM-dd-HH-mm-ss-fff}";
+                    string imageName = $"{time}.bmp";
+                    string savePath = Path.Combine(_SaveFolderPath, imageName);
+                    Directory.CreateDirectory(Path.GetDirectoryName(savePath)!);
+                    bitmap.Save(savePath, ImageFormat.Bmp);
+
+                    TemperatureConverter converter = new TemperatureConverter();
+                    converter.setPrecision(frame.Frame.getTemperaturePrecision());
+
+                    ////온도 정보
+                    ushort[] data = new ushort[frame.Frame.getSize()];
+                    frame.Frame.copyDataTo(data, data.Length);
+
+                    float[] temperature = new float[data.Length];
+                    for (int i = 0; i < data.Length; i++)
+                        temperature[i] = converter.toTemperature(data[i]);
+
+                    string rawName = $"{time}.raw";
+                    savePath = Path.Combine(@"C:\TestFile\250825", rawName);
+                    SaveAsRawFloatBigEndian(savePath, temperature);
+
+
+                }
+                else
+                {
+                    // If burst complete AND queue drained -> exit worker loop (optional)
+                    if (_burstDone.IsSet && _FrameQueue.IsEmpty)
+                    {
+                        _burstDone.Reset();            // 다음 버스트를 위해 리셋
+                        await Task.Delay(10, token);   // 잠깐 쉼
+                        Imager.stopRunning();
+                        continue;                      // 루프 유지
+                    }
+                    try
+                    {
+                        await Task.Delay(10, token);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        break; // 정상 종료
+                    }
+                }
+            }
+            CamLogger.Instance.Print(CamLogger.LogLevel.INFO, $"{DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff")} : Thread 종료");
+
+        }
+        public void SaveAsRawFloatBigEndian(string path, float[] data)
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+
+            using (var fs = File.Create(path))
+            using (var bw = new BinaryWriter(fs))
+            {
+                for (int i = 0; i < data.Length; i++)
+                {
+                    byte[] b = BitConverter.GetBytes(data[i]);  // 머신 엔디안(대부분 little)
+                    if (BitConverter.IsLittleEndian) Array.Reverse(b); // 파일은 big-endian
+                    bw.Write(b);
+                }
             }
         }
 
@@ -265,23 +298,21 @@ namespace OptrisCam.models
             lock (flagState)
             {
                 flagState = flagStateIn.ToString();
+                CamLogger.Instance.Print(CamLogger.LogLevel.INFO, $"{DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff")} :  {flagState}");
             }
         }
 
-        /// <summary>Called when the connection to the camera is lost and can not be recovered.</summary>
-        //public override void onConnectionLost()
-        //{
-        //    MessageBox.Show("Lost connection to device.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        // <summary>Called when the connection to the camera is lost and can not be recovered.</summary>
+        public override void onConnectionLost()
+        {
+         
+            IsConnectionLost = true;
+        }
 
-        //    IsConnectionLost = true;
-        //}
-
-        /// <summary>Called when the SDK has not received frames from the camera for a while.</summary>
-        //public override void onConnectionTimeout()
-        //{
-        //    DialogResult dialogResult = MessageBox.Show("Connection to the device timed out. Disconnect?", "Connection Timeout", MessageBoxButtons.YesNo);
-
-        //    IsConnectionLost = (dialogResult == DialogResult.Yes);
-        //}
+        // <summary>Called when the SDK has not received frames from the camera for a while.</summary>
+        public override void onConnectionTimeout()
+        {
+            IsConnectionLost = true;
+        }
     }
 }

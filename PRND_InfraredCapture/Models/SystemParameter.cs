@@ -26,5 +26,13 @@ namespace PRND_InfraredCapture.Models
         // 장비 설치 오프셋(mm). (예: 장비가 바닥에서 떠있는 높이 등)
         public double LightCurtainHeightOffset{ get; set; } = 440.0;
 
+
+        //InfraredCam
+        public string Cam1ConfigPath { get; set; }
+        public string Cam2ConfigPath { get; set; }
+        public string Cam3ConfigPath { get; set; }
+        public string Cam4ConfigPath { get; set; }
+        public string ImageDataSavePath { get; set; }
+
     }
 }
