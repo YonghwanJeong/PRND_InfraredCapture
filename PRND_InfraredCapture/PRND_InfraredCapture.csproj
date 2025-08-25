@@ -62,6 +62,10 @@
     </Reference>
     <Reference Include="System.ComponentModel.DataAnnotations" />
     <Reference Include="System.Data" />
+    <Reference Include="System.Drawing" />
+    <Reference Include="System.Drawing.Common, Version=4.0.0.2, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
+      <HintPath>..\packages\System.Drawing.Common.4.7.2\lib\net461\System.Drawing.Common.dll</HintPath>
+    </Reference>
     <Reference Include="System.Memory, Version=4.0.2.0, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
       <HintPath>..\packages\System.Memory.4.6.0\lib\net462\System.Memory.dll</HintPath>
     </Reference>
@@ -102,7 +106,10 @@
     <Compile Include="Bases\ViewModelBase.cs" />
     <Compile Include="Locators\ViewModelLocator.cs" />
     <Compile Include="Models\BusyMessage.cs" />
+    <Compile Include="Models\LightCurtainComm.cs" />
     <Compile Include="Models\NavigationMessage.cs" />
+    <Compile Include="Models\ProcessManager.cs" />
+    <Compile Include="Models\SystemParameter.cs" />
     <Compile Include="ViewModels\HomeViewModel.cs" />
     <Compile Include="ViewModels\MainViewModel.cs" />
     <Compile Include="ViewModels\SettingViewModel.cs" />
@@ -169,6 +176,10 @@
     <ProjectReference Include="..\CP.Controls\CP.Controls.csproj">
       <Project>{6dccdde5-ef97-4711-b5ff-d2ec86f447f2}</Project>
       <Name>CP.Controls</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\OptrisCam\OptrisCam.csproj">
+      <Project>{d6bb14df-78fe-4570-bcfd-0d107671d25b}</Project>
+      <Name>OptrisCam</Name>
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>

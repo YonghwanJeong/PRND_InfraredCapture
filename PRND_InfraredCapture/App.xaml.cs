@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Configuration;
 using System.Data;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Windows;
 
@@ -15,6 +16,13 @@ namespace PRND_InfraredCapture
     /// </summary>
     public partial class App : Application
     {
+        [DllImport("winmm.dll")] static extern uint timeBeginPeriod(uint ms);
+        [DllImport("winmm.dll")] static extern uint timeEndPeriod(uint ms);
+        [DllImport("winmm.dll")] static extern int timeGetDevCaps(out TimeCaps caps, int size);
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct TimeCaps { public uint wPeriodMin; public uint wPeriodMax; }
+
         private readonly Bootstrapper _bootstrapper;
 
         public IServiceProvider Services => _bootstrapper.Services;
@@ -29,8 +37,16 @@ namespace PRND_InfraredCapture
             Logger.Instance.Print(Logger.LogLevel.INFO,"Program 실행 됨.");
         }
 
+        protected override void OnStartup(StartupEventArgs e)
+        {
+            base.OnStartup(e);
+            var rc = timeBeginPeriod(1);   // 0이면 성공
+            timeGetDevCaps(out var caps, Marshal.SizeOf<TimeCaps>());
+        }
+
         protected override void OnExit(ExitEventArgs e)
         {
+            timeEndPeriod(1);
             base.OnExit(e);
             // IServiceProvider Dispose 호출
             _bootstrapper.Dispose();

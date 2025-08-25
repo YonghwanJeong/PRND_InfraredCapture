@@ -4,10 +4,15 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 VisualStudioVersion = 17.13.35806.99
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PRND_InfraredCapture", "PRND_InfraredCapture\PRND_InfraredCapture.csproj", "{C4297031-CC6B-4682-9D31-99B228510DC2}"
+	ProjectSection(ProjectDependencies) = postProject
+		{D6BB14DF-78FE-4570-BCFD-0D107671D25B} = {D6BB14DF-78FE-4570-BCFD-0D107671D25B}
+	EndProjectSection
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CP.Common", "CP.Common\CP.Common.csproj", "{FC9FBC59-8D4F-4A46-82E3-3CDA2B286E17}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CP.Controls", "CP.Controls\CP.Controls.csproj", "{6DCCDDE5-EF97-4711-B5FF-D2EC86F447F2}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OptrisCam", "OptrisCam\OptrisCam.csproj", "{D6BB14DF-78FE-4570-BCFD-0D107671D25B}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -27,6 +32,9 @@ Global
 		{6DCCDDE5-EF97-4711-B5FF-D2EC86F447F2}.Debug|x64.Build.0 = Debug|x64
 		{6DCCDDE5-EF97-4711-B5FF-D2EC86F447F2}.Release|x64.ActiveCfg = Release|x64
 		{6DCCDDE5-EF97-4711-B5FF-D2EC86F447F2}.Release|x64.Build.0 = Release|x64
+		{D6BB14DF-78FE-4570-BCFD-0D107671D25B}.Debug|x64.ActiveCfg = Debug|x64
+		{D6BB14DF-78FE-4570-BCFD-0D107671D25B}.Debug|x64.Build.0 = Debug|x64
+		{D6BB14DF-78FE-4570-BCFD-0D107671D25B}.Release|x64.ActiveCfg = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

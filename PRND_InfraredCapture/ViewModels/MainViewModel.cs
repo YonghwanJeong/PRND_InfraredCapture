@@ -2,9 +2,14 @@
 using PRND_InfraredCapture.Views;
 using System;
 using System.Collections.Generic;
+using System.IO.Ports;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
+using OptrisCam;
+using System.Drawing;
+using System.Windows;
 
 namespace PRND_InfraredCapture.ViewModels
 {
@@ -13,13 +18,6 @@ namespace PRND_InfraredCapture.ViewModels
         public MainViewModel()
         {
             Title = "Main ViewModel";
-            
         }
-
-        public override void Dispose()
-        {
-            base.Dispose();
-        } 
-
     }
 }

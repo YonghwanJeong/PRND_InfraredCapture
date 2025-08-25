@@ -1,10 +1,12 @@
 ﻿using CommunityToolkit.Mvvm.Input;
 using CP.Common;
 using CP.Common.Util;
+using OptrisCam;
 using PRND_InfraredCapture.Bases;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Drawing;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -17,7 +19,7 @@ namespace PRND_InfraredCapture.ViewModels
     public class HomeViewModel : ViewModelBase
     {
 
-        public static ObservableCollection<string> ProgramLogs { get; set; }
+        public ObservableCollection<string> ProgramLogs { get; set; } = Logger.Instance.ProgramLogs;
 
         private BitmapSource _TestImage;
         public BitmapSource TestImage
@@ -57,6 +59,10 @@ namespace PRND_InfraredCapture.ViewModels
         
         private static bool _IsFirstLoaded = true;
 
+        private DateTime _lastUpdateTime = DateTime.UtcNow;
+        private int tickCount = 0;
+        private CamController _Controller = new CamController();
+
 
         public HomeViewModel()
         {
@@ -66,7 +72,30 @@ namespace PRND_InfraredCapture.ViewModels
 
             if (_IsFirstLoaded) Initialize();
 
+
+            _Controller = new CamController();
+            _Controller.OnReceiveImageAction += OnImageReceived;
+            _Controller.OnUpdateGrabCount += OnUpdateGrabCount;
+
         }
+
+        private void OnUpdateGrabCount(int obj)
+        {
+            Application.Current.Dispatcher.BeginInvoke(new Action(() =>
+            {
+                ProgramLogs.Add($"초당 GrabCount : {obj}");
+            }));
+        }
+
+        private void OnImageReceived(Bitmap bitmap)
+        {
+            Application.Current.Dispatcher.BeginInvoke(new Action(() =>
+            {
+                //if(bitmap!=null)
+                //    TestImage = BitmapController.BitmapToBitmapSource(bitmap);
+            }));
+        }
+
         /// <summary>
         /// 한번만 실행되야 하는 로직 추가
         /// </summary>
@@ -84,7 +113,37 @@ namespace PRND_InfraredCapture.ViewModels
 
         private void OnTestCommand()
         {
+            _Controller.Connect();
+            _Controller.StartImageLoop();
+            //Task _imageLoopTask = Task.Run(async () =>
+            //{
+            //    while (true)
+            //    {
+            //        tickCount++;
+            //        // 1초마다 실행되는 블록
+            //        var now = DateTime.UtcNow;
+            //        if ((now - _lastUpdateTime).TotalSeconds >= 1)
+            //        {
+            //            var ticksInSec = tickCount;
+            //            tickCount = 0;
+            //            _lastUpdateTime = now;
+            //            try
+            //            {
 
+            //                _ = Application.Current.Dispatcher.BeginInvoke(new Action(() =>
+            //                {
+            //                    ProgramLogs.Add($"초당 GrabCount : {ticksInSec}");
+            //                }));
+
+            //            }
+            //            catch { /* 폼 종료 중 예외 무시 */ }
+
+            //        }
+            //        await Task.Delay(1);
+
+
+            //    }
+            //});
         }
 
         public override Task OnNavigatedFromAsync()
