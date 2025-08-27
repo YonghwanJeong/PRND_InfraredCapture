@@ -1,6 +1,8 @@
-﻿using CP.Common.Models;
+﻿using CommunityToolkit.Mvvm.ComponentModel;
+using CP.Common.Models;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.IO.Ports;
 using System.Linq;
 using System.Text;
@@ -8,6 +10,16 @@ using System.Threading.Tasks;
 
 namespace PRND_InfraredCapture.Models
 {
+    public class FilePathModel : ObservableObject
+    {
+        private string _filePath;
+        public string FilePath
+        {
+            get => _filePath;
+            set => SetProperty(ref _filePath, value);
+        }
+        public string FileName => Path.GetFileNameWithoutExtension(FilePath);
+    }
     public class SystemParameter : Parameter
     {
         //PLC
@@ -24,14 +36,11 @@ namespace PRND_InfraredCapture.Models
         //public double LightCurtainUnit { get; set; } = 30.0;
 
         // 장비 설치 오프셋(mm). (예: 장비가 바닥에서 떠있는 높이 등)
-        public double LightCurtainHeightOffset{ get; set; } = 440.0;
+        public int LightCurtainHeightOffset{ get; set; } = 440;
 
 
         //InfraredCam
-        public string Cam1ConfigPath { get; set; }
-        public string Cam2ConfigPath { get; set; }
-        public string Cam3ConfigPath { get; set; }
-        public string Cam4ConfigPath { get; set; }
+        public List<string> CamPathList { get; set; } = new List<string>();
         public string ImageDataSavePath { get; set; }
 
     }

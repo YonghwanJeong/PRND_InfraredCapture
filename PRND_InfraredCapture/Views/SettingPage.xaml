@@ -67,11 +67,48 @@
 
             <GroupBox Header="InfraredCapture Setting" Margin="10">
                 <StackPanel>
-                    <controls:FilePathTextBox ControlNameWidth="150" ControlName="Cam1 (좌상단) : " FilePath="{Binding Cam1ConfigPath}" Margin="10" SupportedExtentions="{Binding SupportedICamfileExtensions}" />
-                    <controls:FilePathTextBox ControlNameWidth="150" ControlName="Cam2 (좌하단) : " FilePath="{Binding Cam2ConfigPath}" Margin="10" SupportedExtentions="{Binding SupportedICamfileExtensions}" />
-                    <controls:FilePathTextBox ControlNameWidth="150" ControlName="Cam3 (우하단) : " FilePath="{Binding Cam3ConfigPath}" Margin="10" SupportedExtentions="{Binding SupportedICamfileExtensions}" />
-                    <controls:FilePathTextBox ControlNameWidth="150" ControlName="Cam4 (우상단) : " FilePath="{Binding Cam4ConfigPath}" Margin="10" SupportedExtentions="{Binding SupportedICamfileExtensions}" />
-                    <controls:FilePathTextBox ControlNameWidth="150" ControlName="이미지 저장경로 : " FilePath="{Binding ImageDataSavePath}" Margin="10" IsFolderPicker="True"/>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Button Content="카메라 추가" Command="{Binding AddCamCommand}" Margin="5" HorizontalAlignment="Stretch"/>
+                        <Button Grid.Column="1" Content="카메라 삭제" Command="{Binding DelCamCommand}" Margin="5" HorizontalAlignment="Stretch"/>
+                    </Grid>
+                    <ScrollViewer Height="150" Margin="10">
+                        <ItemsControl ItemsSource="{Binding CamPathList}" AlternationCount="1000000">
+
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="40"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+
+                                        <!-- AlternationIndex: 컨테이너(ContentPresenter)에서 읽기 -->
+                                        <TextBlock Grid.Column="0"
+                           Margin="5"
+                           VerticalAlignment="Center"
+                           HorizontalAlignment="Center"
+                           Text="{Binding Path=(ItemsControl.AlternationIndex),
+                                          RelativeSource={RelativeSource AncestorType=ContentPresenter},
+                                          Converter={StaticResource AddNumberConverter},
+                                          ConverterParameter=1}" />
+
+                                        <!-- DataContext는 ItemsControl의 DataContext를 바라보게 -->
+                                        <controls:FilePathTextBox Grid.Column="1"
+                                          Margin="5"
+                                          IsFolderPicker="False"
+                                          SupportedExtentions="{Binding DataContext.SupportedRecipeExtensions,
+                                                               RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                          FilePath="{Binding FilePath, Mode=TwoWay}" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                    <controls:FilePathTextBox ControlNameWidth="150" ControlName="이미지 저장경로 : " FilePath="{Binding ImageDataSavePath, Mode=TwoWay}" Margin="10" IsFolderPicker="True"/>
                 </StackPanel>
             </GroupBox>
         </StackPanel>

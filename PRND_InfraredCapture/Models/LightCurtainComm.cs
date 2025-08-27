@@ -18,10 +18,10 @@ namespace PRND_InfraredCapture.Models
         private StopBits StopBitsMode { get; set; } = StopBits.One;
 
         // mm/스텝 (빔 간격 환산값) — 기본 30mm
-        private double _MmPerStep { get; set; } = 30.0;
+        private int _MmPerStep { get; set; } = 30;
 
         // 장비 설치 오프셋(mm). (예: 장비가 바닥에서 떠있는 높이 등)
-        private double _OffsetMm { get; set; } = 440.0;
+        private int _OffsetMm { get; set; } = 440;
 
         // Half-Duplex 모듈 수동 전환 쓰는 경우만 사용 (대부분은 false로 둠)
         private bool UseRtsReceiveHold { get; set; } = false;
@@ -30,6 +30,7 @@ namespace PRND_InfraredCapture.Models
         private SerialPort _port;
         private CancellationTokenSource _cts;
         private Task _rxTask;
+        private int _MaxHeight = 0;
 
         public LightCurtainComm(string portName, int baudRate)
         {
@@ -37,17 +38,13 @@ namespace PRND_InfraredCapture.Models
             _BaudRate = baudRate;
         }
 
-        public void SetParameter(double heightOffset)
-        {
-            //_MmPerStep = unit;
-            _OffsetMm = heightOffset;
-        }
-
-        public void Start()
+        public void Start(int heightOffset)
         {
             if (_rxTask != null) return;
 
+            _OffsetMm = heightOffset;
             _cts = new CancellationTokenSource();
+            _MaxHeight = 0;
 
             _port = new SerialPort(_PortName, _BaudRate, _ParityMode, _DataBits, StopBitsMode)
             {
@@ -65,7 +62,7 @@ namespace PRND_InfraredCapture.Models
             }
             catch (Exception ex)
             {
-                Logger.Instance.Print(Logger.LogLevel.ERROR, $"포트 오픈 실패: {ex.Message}");
+                Logger.Instance.Print(Logger.LogLevel.ERROR, $"포트 오픈 실패: {ex.Message}", true);
                 _port?.Dispose();
                 _port = null;
                 return;
@@ -74,7 +71,7 @@ namespace PRND_InfraredCapture.Models
             _rxTask = Task.Run(() => ReceiveLoop(_cts.Token), _cts.Token);
         }
 
-        public void Stop()
+        public int Stop()
         {
             try
             {
@@ -94,6 +91,7 @@ namespace PRND_InfraredCapture.Models
                 _cts = null;
                 Logger.Instance.Print(Logger.LogLevel.INFO, $"LightCurtain 수신 정지");
             }
+            return _MaxHeight;
         }
 
         private void ReceiveLoop(CancellationToken ct)
@@ -120,14 +118,14 @@ namespace PRND_InfraredCapture.Models
                         buffer.RemoveRange(0, 2);
 
                         // 위치(mm) 계산
-                        double lowMmRaw = lowIdx * _MmPerStep;
-                        double highMmRaw = highIdx * _MmPerStep;
+                        int lowMmRaw = lowIdx * _MmPerStep;
+                        int highMmRaw = highIdx * _MmPerStep;
 
-                        double lowMmAdj = lowMmRaw + _OffsetMm;
-                        double highMmAdj = highMmRaw + _OffsetMm;
+                        int lowMmAdj = lowMmRaw + _OffsetMm;
+                        int highMmAdj = highMmRaw + _OffsetMm;
 
                         // (선택) 두 지점 차이도 보고 싶으면:
-                        double spanMm = (highIdx - lowIdx) * _MmPerStep;
+                        int spanMm = (highIdx - lowIdx) * _MmPerStep;
 
                         OnPairDecoded(lowIdx, highIdx, lowMmAdj, highMmAdj, spanMm);
                     }
@@ -150,7 +148,7 @@ namespace PRND_InfraredCapture.Models
         /// 디코딩된 한 쌍(low, high) 이벤트 콜백.
         /// 여기서 UI에 바인딩하거나 로그로 출력하세요.
         /// </summary>
-        private void OnPairDecoded(byte lowIdx, byte highIdx, double lowMmAdj, double highMmAdj, double spanMm)
+        private void OnPairDecoded(byte lowIdx, byte highIdx, int lowMmAdj, int highMmAdj, int spanMm)
         {
             // 예시: Debug 출력 (필요 시 ObservableCollection 등에 추가)
             string msg =
@@ -158,7 +156,10 @@ namespace PRND_InfraredCapture.Models
                 $"HIGH: idx={highIdx}, h={highMmAdj:0.##} mm | " +
                 $"SPAN: {spanMm:0.##} mm (MmPerStep={_MmPerStep}, Offset={_OffsetMm})";
 
-            Logger.Instance.Print(Logger.LogLevel.INFO, $"{msg}");
+            if(_MaxHeight< highMmAdj)
+                _MaxHeight = highMmAdj;
+
+            Logger.Instance.Print(Logger.LogLevel.INFO, $"{msg}", true);
 
         }
 

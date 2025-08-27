@@ -53,8 +53,8 @@ namespace PRND_InfraredCapture.ViewModels
         }
 
 
-        private double _LightCurtainHeightOffset;
-        public double LightCurtainHeightOffset
+        private int _LightCurtainHeightOffset;
+        public int LightCurtainHeightOffset
         {
             get { return _LightCurtainHeightOffset; }
             set { SetProperty(ref _LightCurtainHeightOffset, value); }
@@ -64,37 +64,39 @@ namespace PRND_InfraredCapture.ViewModels
         #region InfraredCamera
         public ObservableCollection<string> SupportedICamfileExtensions { get; set; } = new ObservableCollection<string> { "xml"};
 
-
-        private string _Cam1ConfigPath;
-        public string Cam1ConfigPath
-        {
-            get { return _Cam1ConfigPath; }
-            set { SetProperty(ref _Cam1ConfigPath, value); }
-        }
+        public ObservableCollection<FilePathModel> CamPathList { get; set; } = new ObservableCollection<FilePathModel>();
 
 
-        private string _Cam2ConfigPath;
-        public string Cam2ConfigPath
-        {
-            get { return _Cam2ConfigPath; }
-            set { SetProperty(ref _Cam2ConfigPath, value); }
-        }
+        //private string _Cam1ConfigPath;
+        //public string Cam1ConfigPath
+        //{
+        //    get { return _Cam1ConfigPath; }
+        //    set { SetProperty(ref _Cam1ConfigPath, value); }
+        //}
 
 
-        private string _Cam3ConfigPath;
-        public string Cam3ConfigPath
-        {
-            get { return _Cam3ConfigPath; }
-            set { SetProperty(ref _Cam3ConfigPath, value); }
-        }
+        //private string _Cam2ConfigPath;
+        //public string Cam2ConfigPath
+        //{
+        //    get { return _Cam2ConfigPath; }
+        //    set { SetProperty(ref _Cam2ConfigPath, value); }
+        //}
 
 
-        private string _Cam4ConfigPath;
-        public string Cam4ConfigPath
-        {
-            get { return _Cam4ConfigPath; }
-            set { SetProperty(ref _Cam4ConfigPath, value); }
-        }
+        //private string _Cam3ConfigPath;
+        //public string Cam3ConfigPath
+        //{
+        //    get { return _Cam3ConfigPath; }
+        //    set { SetProperty(ref _Cam3ConfigPath, value); }
+        //}
+
+
+        //private string _Cam4ConfigPath;
+        //public string Cam4ConfigPath
+        //{
+        //    get { return _Cam4ConfigPath; }
+        //    set { SetProperty(ref _Cam4ConfigPath, value); }
+        //}
 
 
 
@@ -107,6 +109,9 @@ namespace PRND_InfraredCapture.ViewModels
         #endregion
 
 
+        public ICommand AddCamCommand { get; set; }
+        public ICommand DelCamCommand { get; set; }
+
 
         private ProcessManager _ProcessManager = ProcessManager.Instance;
         private static bool _IsFirstLoaded = true;
@@ -117,7 +122,10 @@ namespace PRND_InfraredCapture.ViewModels
             if(_IsFirstLoaded) Initialize();
             
             InitAvailableSerialPort();
-            
+            AddCamCommand = new RelayCommand(OnAddCam);
+            DelCamCommand = new RelayCommand(OnDelCam);
+
+
             UpdateParam2UI();
 
         }
@@ -147,6 +155,16 @@ namespace PRND_InfraredCapture.ViewModels
             921600  // 초고속 통신
             };
         }
+        private void OnDelCam()
+        {
+            CamPathList.RemoveAt(CamPathList.Count - 1);
+        }
+
+        private void OnAddCam()
+        {
+            CamPathList.Add(new FilePathModel { FilePath=""});
+
+        }
 
         private void UpdateUI2Param()
         {
@@ -155,11 +173,10 @@ namespace PRND_InfraredCapture.ViewModels
             _ProcessManager.SystemParam.LightCurtainPortName = SelectedComPort;
             _ProcessManager.SystemParam.LightCurtainBaudRate = SelectedBaudRate;
             _ProcessManager.SystemParam.LightCurtainHeightOffset = LightCurtainHeightOffset;
-            _ProcessManager.SystemParam.Cam1ConfigPath = Cam1ConfigPath;
-            _ProcessManager.SystemParam.Cam2ConfigPath = Cam2ConfigPath;
-            _ProcessManager.SystemParam.Cam3ConfigPath = Cam3ConfigPath;
-            _ProcessManager.SystemParam.Cam4ConfigPath = Cam4ConfigPath;
+            _ProcessManager.SystemParam.CamPathList = CamPathList.Select(item => item.FilePath).ToList();
             _ProcessManager.SystemParam.ImageDataSavePath = ImageDataSavePath;
+
+            _ProcessManager.SaveSystemParameter();
         }
 
         private void UpdateParam2UI()
@@ -169,10 +186,8 @@ namespace PRND_InfraredCapture.ViewModels
             SelectedComPort = _ProcessManager.SystemParam.LightCurtainPortName;
             SelectedBaudRate = _ProcessManager.SystemParam.LightCurtainBaudRate;
             LightCurtainHeightOffset = _ProcessManager.SystemParam.LightCurtainHeightOffset ;
-            Cam1ConfigPath = _ProcessManager.SystemParam.Cam1ConfigPath;
-            Cam2ConfigPath = _ProcessManager.SystemParam.Cam2ConfigPath;
-            Cam3ConfigPath = _ProcessManager.SystemParam.Cam3ConfigPath;
-            Cam4ConfigPath = _ProcessManager.SystemParam.Cam4ConfigPath;
+            CamPathList.Clear();
+            _ProcessManager.SystemParam.CamPathList.Select(p=> new FilePathModel { FilePath = p }).ToList().ForEach(p => CamPathList.Add(p));
             ImageDataSavePath = _ProcessManager.SystemParam.ImageDataSavePath;
         }
 

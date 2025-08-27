@@ -1,18 +1,30 @@
 ﻿using Optris.OtcSDK;
 using System;
 using System.Collections.Concurrent;
+using System.ComponentModel;
+using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.Security.Cryptography;
+using static System.Net.Mime.MediaTypeNames;
 
 
-namespace OptrisCam.models
+namespace CP.OptrisCam.models
 {
     public sealed class CapturedFrame
     {
+        public int FrameIndex { get; set; }
         public ThermalFrame Frame { get; set; }
         public FrameMetadata Meta { get; set; }
         public DateTime Timestamp { get; set; }
+    }
+
+    public enum AcquisitionAngle
+    {
+        Angle_0 = 0,
+        Angle_90 = 90,
+        Angle_180 = 180,
+        Angle_270 = 270
     }
 
     /// <summary>
@@ -30,6 +42,10 @@ namespace OptrisCam.models
         private string flagState = "";
         private string _ConfigFilePath;
         private string _SaveFolderPath = "";
+        private AcquisitionAngle _AcquisitionAngle = AcquisitionAngle.Angle_0;
+        private CamIndex _CamIndex;
+        private int _FrameCount = 80;
+
 
         public bool IsConnected { get; private set; }
         public bool IsConnectionLost { get; private set; }
@@ -39,7 +55,7 @@ namespace OptrisCam.models
 
         //80프레임을 얻기 위한 변수
         private ConcurrentQueue<CapturedFrame> _FrameQueue = new ConcurrentQueue<CapturedFrame>();
-        private static int _RemainingFrameCount = 0;
+        private int _RemainingFrameCount = 0;
 
 
         private CancellationTokenSource _GetThermalDataCts;
@@ -49,7 +65,7 @@ namespace OptrisCam.models
         private readonly ManualResetEventSlim _burstDone = new(false); // 80장 수집 완료 신호
 
         /// <summary>Constructor</summary>
-        public IRImagerShow(string configFilePath)
+        public IRImagerShow(CamIndex camIndex, string configPath)
         {
             // Instantiate an imager object. It will serve as the main interface to the SDK
             Imager = IRImagerFactory.getInstance().create("native");
@@ -77,7 +93,8 @@ namespace OptrisCam.models
 
             IsConnected = false;
             IsConnectionLost = false;
-            _ConfigFilePath = configFilePath;
+            _ConfigFilePath = configPath;
+            _CamIndex = camIndex;
 
         }
 
@@ -87,15 +104,12 @@ namespace OptrisCam.models
         public void Connect()
         {
             if (IsConnected)
-            {
                 return;
-            }
 
             // Read the configuration file and initialize the imager with it
             IRImagerConfig config = IRImagerConfigReader.read(_ConfigFilePath);
             Imager.connect(config);
-            // Start processing
-            //Imager.runAsync();
+;
             _GetThermalDataCts = new CancellationTokenSource();
             _GetThermalDataTask = Task.Run(() => GetThermalDataAsync(_GetThermalDataCts.Token));
 
@@ -133,18 +147,20 @@ namespace OptrisCam.models
         {
             if (!IsConnected)
                 return;
+            
             _SaveFolderPath = savePath;
-            CamLogger.Instance.Print(CamLogger.LogLevel.INFO, $"{DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff")} : Start Capture");
+            _FrameCount = frameCount;
             Imager.runAsync();
+            //Imager.setFocusMotorPosition(68);
             await Task.Delay(1000);
             // reset state
             _burstDone.Reset();
             _FrameQueue = new ConcurrentQueue<CapturedFrame>();
-
-            Volatile.Write(ref _RemainingFrameCount, frameCount);
-
-            // Start camera acquisition
             
+            Volatile.Write(ref _RemainingFrameCount, frameCount);
+            CamLogger.Instance.Print(CamLogger.LogLevel.INFO, $"{Enum.GetName(typeof(CamIndex), _CamIndex)} Start Capture", true);
+            // Start camera acquisition
+
         }
 
         /// <summary>Returns the type of the device.</summary>
@@ -190,6 +206,7 @@ namespace OptrisCam.models
                 var cloned = thermal.clone();
                 _FrameQueue.Enqueue(new CapturedFrame
                 {
+                    FrameIndex = _FrameCount - before,
                     Frame = cloned,
                     Meta = meta,
                     Timestamp = DateTime.Now
@@ -202,7 +219,7 @@ namespace OptrisCam.models
                 if (after == 0)
                 {
                     _burstDone.Set();
-                    CamLogger.Instance.Print(CamLogger.LogLevel.INFO, $"{DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff")} : [BURST] complete -> + signal done");
+                    CamLogger.Instance.Print(CamLogger.LogLevel.INFO, $"{Enum.GetName(typeof(CamIndex), _CamIndex)} Capture Done ({_FrameCount}Frame)", true);
                 }
             }
         }
@@ -212,44 +229,53 @@ namespace OptrisCam.models
             {
                 if (_FrameQueue.TryDequeue(out var frame))
                 {
-                    // Process & save (example: BMP)
-                    imageBuilder.setThermalFrame(frame.Frame);
-                    imageBuilder.convertTemperatureToPaletteImage();
 
-                    int width = imageBuilder.getWidth();
-                    int height = imageBuilder.getHeight();
-
-                    byte[] image = new byte[imageBuilder.getImageSizeInBytes()];
-                    imageBuilder.copyImageDataTo(image, image.Length);
-
-                    var rectangle = new System.Drawing.Rectangle(0, 0, width, height);
-                    using var bitmap = new Bitmap(width, height, System.Drawing.Imaging.PixelFormat.Format24bppRgb);
-                    var bitmapData = bitmap.LockBits(rectangle, ImageLockMode.ReadWrite, bitmap.PixelFormat);
-                    System.Runtime.InteropServices.Marshal.Copy(image, 0, bitmapData.Scan0, image.Length);
-                    bitmap.UnlockBits(bitmapData);
-                    
                     string time = $"{frame.Timestamp:yyyy-MM-dd-HH-mm-ss-fff}";
-                    string imageName = $"{time}.bmp";
-                    string savePath = Path.Combine(_SaveFolderPath, imageName);
-                    Directory.CreateDirectory(Path.GetDirectoryName(savePath)!);
-                    bitmap.Save(savePath, ImageFormat.Bmp);
+                    string imageName = $"{frame.FrameIndex}_{time}.bmp";
+                    string imageSavePath = Path.Combine(_SaveFolderPath, Enum.GetName(typeof(CamIndex), _CamIndex),"Image", imageName);
+                    string rawName = $"{frame.FrameIndex}_{time}.raw";
+                    string rawSavePath = Path.Combine(_SaveFolderPath, Enum.GetName(typeof(CamIndex), _CamIndex), "Raw", rawName);
+                    int width = frame.Frame.getWidth();
+                    int height = frame.Frame.getHeight();
 
+                    ////온도 정보
                     TemperatureConverter converter = new TemperatureConverter();
                     converter.setPrecision(frame.Frame.getTemperaturePrecision());
 
-                    ////온도 정보
                     ushort[] data = new ushort[frame.Frame.getSize()];
                     frame.Frame.copyDataTo(data, data.Length);
 
                     float[] temperature = new float[data.Length];
                     for (int i = 0; i < data.Length; i++)
                         temperature[i] = converter.toTemperature(data[i]);
+                    
 
-                    string rawName = $"{time}.raw";
-                    savePath = Path.Combine(@"C:\TestFile\250825", rawName);
-                    SaveAsRawFloatBigEndian(savePath, temperature);
+                    var rotated = ThermalRotate.RotateTemperature(temperature, width, height, (int)_AcquisitionAngle);
+                    SaveAsRawFloatBigEndian(rawSavePath, rotated);
 
 
+                    // Process & save (example: BMP)
+                    imageBuilder.setThermalFrame(frame.Frame);
+                    imageBuilder.convertTemperatureToPaletteImage();
+
+                    byte[] image = new byte[imageBuilder.getImageSizeInBytes()];
+                    imageBuilder.copyImageDataTo(image, image.Length);
+                    
+                    using var bitmap = new Bitmap(width, height, System.Drawing.Imaging.PixelFormat.Format24bppRgb);
+                    var rectangle = new System.Drawing.Rectangle(0, 0, width, height);
+                    var bitmapData = bitmap.LockBits(rectangle, ImageLockMode.ReadWrite, bitmap.PixelFormat);
+                    System.Runtime.InteropServices.Marshal.Copy(image, 0, bitmapData.Scan0, image.Length);
+                    bitmap.UnlockBits(bitmapData);
+
+                    if(_AcquisitionAngle == AcquisitionAngle.Angle_90)
+                        bitmap.RotateFlip(RotateFlipType.Rotate90FlipNone);
+                    else if(_AcquisitionAngle == AcquisitionAngle.Angle_180)
+                        bitmap.RotateFlip(RotateFlipType.Rotate180FlipNone);
+                    else if(_AcquisitionAngle == AcquisitionAngle.Angle_270)
+                        bitmap.RotateFlip(RotateFlipType.Rotate270FlipNone);
+
+                    Directory.CreateDirectory(Path.GetDirectoryName(imageSavePath)!);
+                    bitmap.Save(imageSavePath, ImageFormat.Bmp);
                 }
                 else
                 {

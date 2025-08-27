@@ -1,15 +1,13 @@
 ﻿using CommunityToolkit.Mvvm.Input;
 using CP.Common;
-using OptrisCam;
 using PRND_InfraredCapture.Bases;
+using PRND_InfraredCapture.Models;
 using System;
-using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Drawing;
-using System.Linq;
-using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media.Imaging;
 
@@ -28,68 +26,99 @@ namespace PRND_InfraredCapture.ViewModels
         }
 
 
-        private int _CurrentXoffset;
-        public int CurrentXoffset
+        private string _OnOfflineBtnText;
+        public string OnOfflineBtnText
         {
-            get { return _CurrentXoffset; }
-            set { SetProperty(ref _CurrentXoffset, value); }
+            get { return _OnOfflineBtnText; }
+            set { SetProperty(ref _OnOfflineBtnText, value); }
         }
-
-
-        private int _CurrentYoffset;
-        public int CurrentYoffset
-        {
-            get { return _CurrentYoffset; }
-            set { SetProperty(ref _CurrentYoffset, value); }
-        }
-
-
-        private double _CurrentScale;
-        public double CurrentScale
-        {
-            get { return _CurrentScale; }
-            set { SetProperty(ref _CurrentScale, value); }
-        }
-
 
         //public ICommand TestCommand { get; set; }
+        public ICommand ControlOnOffLineCommand { get; set; }
         public ICommand ConnectCommnad { get; set; }
         public ICommand CaptureImageCommand { get; set; }
         public ICommand DisConnectCommand { get; set; }
         public ICommand PageLoadedCommmand { get; set; }
+        public ICommand LightCurtainStartCommand { get; set; }
+        public ICommand LightCurtainStopCommand { get; set; }
 
-        
+
         private static bool _IsFirstLoaded = true;
 
         private DateTime _lastUpdateTime = DateTime.UtcNow;
         private int tickCount = 0;
-        private CamController _Controller = new CamController();
+        private ProcessManager _ProcessManager = ProcessManager.Instance;
 
 
         public HomeViewModel()
         {
             Title = "Home";
+            OnOfflineBtnText = "Start Online";
+            ControlOnOffLineCommand = new RelayCommand(OnControlOnOfflineCommand);
             ConnectCommnad = new RelayCommand(OnConnectCommand);
             CaptureImageCommand = new RelayCommand(OnCaptureImageCommand);
             PageLoadedCommmand = new RelayCommand(OnPageLoaded);
             DisConnectCommand = new RelayCommand(OnDisconnectCommand);
+            LightCurtainStartCommand = new RelayCommand(OnStartLightCurtain);
+            LightCurtainStopCommand = new RelayCommand(OnStopLightCurtain);
             if (_IsFirstLoaded) Initialize();
+            ChaningEvent();
 
-
-            _Controller = new CamController();
-            _Controller.OnReceiveImageAction += OnImageReceived;
-            _Controller.OnUpdateGrabCount += OnUpdateGrabCount;
 
         }
+        public void ChaningEvent()
+        {
+            Logger.Instance.OnLogSavedAction += OnLogSaved;
+            _ProcessManager.OnCamLogsaved += OnLogSaved;
+        }
 
+        private void OnLogSaved(string obj)
+        {
+            Application.Current?.Dispatcher.BeginInvoke(new Action(delegate ()
+            {
+                ProgramLogs.Add(obj);
+            }));
+        }
+
+        public void DeChaningEvent()
+        {
+            Logger.Instance.OnLogSavedAction -= OnLogSaved;
+            _ProcessManager.OnCamLogsaved -= OnLogSaved;
+        }
+        private void OnControlOnOfflineCommand()
+        {
+            if (!_ProcessManager.IsOnlineMode)
+            {
+                _ProcessManager.StartOnline();
+                OnOfflineBtnText = "Stop Online";
+                Logger.Instance.Print(Logger.LogLevel.INFO, "Change to Online Mode");
+            }
+            else
+            {
+                _ProcessManager.StopOnline();
+                OnOfflineBtnText = "Start Online";
+                Logger.Instance.Print(Logger.LogLevel.INFO, "Change to Offline Mode");
+            }
+            
+        }
+        private void OnStartLightCurtain()
+        {
+            _ProcessManager.StartLightCurtain();
+        }
+
+        private void OnStopLightCurtain()
+        {
+            _ProcessManager.StopLightCurtain();
+        }
+
+      
         private void OnDisconnectCommand()
         {
-            _Controller.Disconnect();
         }
 
         private void OnCaptureImageCommand()
         {
-            _Controller.CaptureImage(80, @"C:\TestFile\250825");
+            _ProcessManager.StartCaptureImage();
         }
 
         private void OnUpdateGrabCount(int obj)
@@ -114,7 +143,7 @@ namespace PRND_InfraredCapture.ViewModels
         /// </summary>
         public void Initialize()
         {
-            
+
 
             _IsFirstLoaded = false;
         }
@@ -126,13 +155,13 @@ namespace PRND_InfraredCapture.ViewModels
 
         private void OnConnectCommand()
         {
-            _Controller.Connect();
-            //_Controller.StartImageLoop();
+            //_ProcessManager.ConnectCam();
         }
 
         public override Task OnNavigatedFromAsync()
         {
             Logger.Instance.Print(Logger.LogLevel.INFO, "Escape HomeView");
+            DeChaningEvent();
             return base.OnNavigatedFromAsync();
         }
 

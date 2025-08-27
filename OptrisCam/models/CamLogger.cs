@@ -4,9 +4,9 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Text;
 
-namespace OptrisCam.models
+namespace CP.OptrisCam.models
 {
-    internal class CamLogger
+    public class CamLogger
     {
         #region Data
 

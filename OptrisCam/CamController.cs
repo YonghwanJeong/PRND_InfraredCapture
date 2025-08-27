@@ -1,17 +1,24 @@
-﻿using OptrisCam.models;
-using OptrisCam;
+﻿using CP.OptrisCam.models;
 using System.Drawing;
 
 using Optris.OtcSDK;
 
-namespace OptrisCam
+namespace CP.OptrisCam
 {
-    public class CamController
+    public enum CamIndex
+    {
+        CAM1 = 0,
+        CAM2 = 1,
+        CAM3 = 2,
+        CAM4 = 3,
+    }
+
+    public class CamController : IDisposable
     {
         private CancellationTokenSource _imageLoopCts;
         private Task _imageLoopTask;
         private DateTime _lastUpdateTime;
-        private IRImagerShow imagerShow = new(@"C:\Users\jijon\AppData\Roaming\Imager\Configs\25074286.xml");
+        private IRImagerShow[] _OptrisCams;
         
 
         int tickCount = 0;
@@ -19,36 +26,46 @@ namespace OptrisCam
         public Action<Bitmap> OnReceiveImageAction { get; set; }
         public Action<int> OnUpdateGrabCount{ get; set; }
 
-        public CamController()
+        public CamController(List<string> camFileList)
         {
+            _OptrisCams = new IRImagerShow[camFileList.Count];
 
+            for (int i = 0; i < camFileList.Count; i++)
+            {
+                _OptrisCams[i] = new IRImagerShow((CamIndex)i, camFileList[i]);
+            }
         }
 
-        public void Connect()
+        public void Connect(CamIndex camIndex)
         {
             try
             {
-                imagerShow.Disconnect();
-                imagerShow.Connect();
+                _OptrisCams[(int)camIndex].Disconnect();
+                _OptrisCams[(int)camIndex].Connect();
+                CamLogger.Instance.Print(CamLogger.LogLevel.INFO, $"{Enum.GetName(typeof(CamIndex), camIndex)} Connected", true);
             }
             catch (SDKException ex)
             {
-                Console.WriteLine($"error {ex.Message}");
+                CamLogger.Instance.Print(CamLogger.LogLevel.ERROR, $"{Enum.GetName(typeof(CamIndex), camIndex)} Connect Error: {ex.Message}", true);
             }
         }
 
-        public void CaptureImage(int framecnt, string savePath)
+        public void CaptureImage(CamIndex index, int framecnt, string savePath)
         {
-            imagerShow.StartImageCapture(framecnt, savePath);
+            if (_OptrisCams[(int)index].IsConnected)
+                _OptrisCams[(int)index].StartImageCapture(framecnt, savePath);
         }
-        public void Disconnect()
+        public void Disconnect(CamIndex camIndex)
         {
-            if (!imagerShow.IsConnected)
-            {
+            if (!_OptrisCams[(int)camIndex].IsConnected)
                 return;
-            }
-            imagerShow.Disconnect();
-            
+            _OptrisCams[(int)camIndex].Disconnect();
+            CamLogger.Instance.Print(CamLogger.LogLevel.INFO, $"{Enum.GetName(typeof(CamIndex), camIndex)} Disconnected", true);
+        }
+        public void DisconnectAll()
+        {
+            for(int i = 0; i < _OptrisCams.Length; i++)
+                Disconnect((CamIndex)i);
         }
 
         public void StartImageLoop()
@@ -62,49 +79,6 @@ namespace OptrisCam
             {
                 while (!ct.IsCancellationRequested)
                 {
-                    tickCount++;
-
-                    // 연결 상태 확인
-                    if (!imagerShow.IsConnected || imagerShow.IsConnectionLost)
-                    {
-                        Disconnect();
-                    }
-
-                    //빠른 주기 작업: 이미지 받아와서 PictureBox 갱신
-                    Bitmap? image = null;
-                    try
-                    {
-                        //image = imagerShow.GetImage();
-                        OnReceiveImageAction?.Invoke(image);
-                    }
-                    catch
-                    {
-                        // 필요 시 로깅
-                    }
-
-                    // 상태바 등 빠른 주기 UI 갱신
-                    imagerShow.GetFlagState();
-
-
-                    // 1초마다 실행되는 블록
-                    var now = DateTime.UtcNow;
-                    if ((now - _lastUpdateTime).TotalSeconds >= 1)
-                    {
-                        var ticksInSec = tickCount;
-                        tickCount = 0;
-                        _lastUpdateTime = now;
-                        try
-                        {
-                            //sbFPS.Text = $"초당 tick : {ticksInSec}";
-                            OnUpdateGrabCount?.Invoke(imagerShow.GrabCount);
-                            //OnUpdateGrabCount?.Invoke(ticksInSec);
-                            // 필요 시 GrabCount 등도 여기서 초기화/표시
-                            imagerShow.GrabCount = 0;
-                        }
-                        catch { /* 폼 종료 중 예외 무시 */ }
-                        
-                    }
-
                     // 1ms 주기
                     try
                     {
@@ -134,8 +108,9 @@ namespace OptrisCam
             }
         }
 
-        
-
-
+        public void Dispose()
+        {
+            DisconnectAll();
+        }
     }
 }

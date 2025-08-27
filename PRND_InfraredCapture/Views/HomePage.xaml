@@ -17,18 +17,19 @@
     </i:Interaction.Triggers>
     <Grid>
         <Grid.RowDefinitions>
-            <RowDefinition Height="100"/>
+            <RowDefinition Height="300"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
         <StackPanel>
-            <Button Content="Conect" Command="{Binding ConnectCommnad}"/>
+            <Button Content="{Binding OnOfflineBtnText}" Command="{Binding ControlOnOffLineCommand}" />
             <Button Content="Capture" Command="{Binding CaptureImageCommand}"/>
-            <Button Content="DisConnect" Command="{Binding DisConnectCommand}"/>
+            <Button Content="LightCurtain Start" Command="{Binding LightCurtainStartCommand}"/>
+            <Button Content="LightCurtain Stop" Command="{Binding LightCurtainStopCommand}"/>
         </StackPanel>
-        <controls:ImagePanel Grid.Row="1" ImageSource="{Binding TestImage}" Height="400"/>
-        <GroupBox Grid.Row="2" Header="Program Log" Margin="5" >
-            <ListBox BorderThickness="1" ItemsSource="{Binding ProgramLogs, Mode=OneWay}"  Margin="5" FontSize="4" >
+        <controls:ImagePanel Grid.Row="1" ImageSource="{Binding TestImage}" Height="300"/>
+        <GroupBox Grid.Row="2" Header="Program Log" Margin="10" >
+            <ListBox BorderThickness="1" ItemsSource="{Binding ProgramLogs, Mode=OneWay}"  Margin="5" FontSize="4" Height="300">
                 <i:Interaction.Behaviors>
                     <behaviors:ScrollIntoViewBehavior/>
                 </i:Interaction.Behaviors>

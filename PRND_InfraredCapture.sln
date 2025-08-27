@@ -12,7 +12,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CP.Common", "CP.Common\CP.C
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CP.Controls", "CP.Controls\CP.Controls.csproj", "{6DCCDDE5-EF97-4711-B5FF-D2EC86F447F2}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OptrisCam", "OptrisCam\OptrisCam.csproj", "{D6BB14DF-78FE-4570-BCFD-0D107671D25B}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CP.OptrisCam", "OptrisCam\CP.OptrisCam.csproj", "{D6BB14DF-78FE-4570-BCFD-0D107671D25B}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

@@ -16,8 +16,8 @@
     <Deterministic>true</Deterministic>
     <NuGetPackageImportStamp>
     </NuGetPackageImportStamp>
-	<AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
-	<AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x64'">
     <DebugSymbols>true</DebugSymbols>
@@ -179,9 +179,9 @@
       <Project>{6dccdde5-ef97-4711-b5ff-d2ec86f447f2}</Project>
       <Name>CP.Controls</Name>
     </ProjectReference>
-    <ProjectReference Include="..\OptrisCam\OptrisCam.csproj">
+    <ProjectReference Include="..\OptrisCam\CP.OptrisCam.csproj">
       <Project>{d6bb14df-78fe-4570-bcfd-0d107671d25b}</Project>
-      <Name>OptrisCam</Name>
+      <Name>CP.OptrisCam</Name>
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>
@@ -189,6 +189,9 @@
   </ItemGroup>
   <ItemGroup>
     <Resource Include="Resources\CustomAir_Cylinder.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <WCFMetadata Include="Connected Services\" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <Import Project="..\packages\CommunityToolkit.Mvvm.8.4.0\build\CommunityToolkit.Mvvm.targets" Condition="Exists('..\packages\CommunityToolkit.Mvvm.8.4.0\build\CommunityToolkit.Mvvm.targets')" />
