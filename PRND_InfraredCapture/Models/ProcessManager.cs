@@ -1,14 +1,16 @@
-﻿using System;
-using CP.OptrisCam;
+﻿using CP.OptrisCam;
+using CP.OptrisCam.models;
+using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using static MCProtocol.Mitsubishi;
-using CP.OptrisCam.models;
 using System.Windows;
+using System.Windows.Documents;
+using static MCProtocol.Mitsubishi;
 
 namespace PRND_InfraredCapture.Models
 {
@@ -30,6 +32,9 @@ namespace PRND_InfraredCapture.Models
         }
         private static readonly object LockObject = new object();
         #endregion
+
+
+
         public bool IsOnlineMode { get; set; }
         public readonly string SYSTEM_PARAM_PATH = Path.Combine(Environment.CurrentDirectory, "SystemParam.insp");
         public SystemParameter SystemParam { get; set; } = new SystemParameter();
@@ -49,6 +54,7 @@ namespace PRND_InfraredCapture.Models
 
         private CamController _CamController;
         private LightCurtainComm _LightCurtain;
+        private LeuzeMdiClient[] _Lasers;
 
 
 
@@ -68,26 +74,62 @@ namespace PRND_InfraredCapture.Models
             OnCamLogsaved?.Invoke(obj);
         }
 
-        public void StartOnline()
+        public async void StartOnline()
         {
             if (IsOnlineMode)
                 return;
             
             _CamController = new CamController(SystemParam.CamPathList);
             _LightCurtain = new LightCurtainComm(SystemParam.LightCurtainPortName, SystemParam.LightCurtainBaudRate);
-
+            
+            _Lasers = new LeuzeMdiClient[SystemParam.LaserConnectionList.Count];
+            
+            for (int i = 0; i < SystemParam.LaserConnectionList.Count; i++)
+            {
+                _Lasers[i] = new LeuzeMdiClient((ModuleIndex)i, SystemParam.LaserConnectionList[i].IPAddress, SystemParam.LaserConnectionList[i].Port);
+                _Lasers[i].FrameReceived += _Laser_FrameReceived;
+                await _Lasers[i].ConnectAsync();
+                await _Lasers[i].StartMonitoringAsync();
+            }
             IsOnlineMode = true;
 
             ConnectCam();
 
             Logger.Instance.Print(Logger.LogLevel.INFO, $"Online 모드 시작", true);
         }
-        public void StopOnline()
+
+        private void _Laser_FrameReceived(ModuleIndex index, Header hdr, ushort[] dist, ushort[] inten)
+        {
+            double a0 = hdr.FirstAngle_mdeg / 1000.0;
+            double da = hdr.DeltaAngle_mdeg / 1000.0;
+
+            //Console.Write($"{Enum.GetName(typeof(ModuleIndex), index)}] #{hdr.PacketNo} {hdr.SubNo}/{hdr.TotalNo}] f={hdr.ScanFreqHz}Hz spots={hdr.ScanSpots} ");
+            //int show = Math.Min(5, dist.Length);
+
+            //for (int i = 0; i < show; i++)
+            //{
+            //    double ang = a0 + i * da;
+            //    if (inten.Length == dist.Length)
+            //        Console.Write($"({ang:F1}°, {dist[i]}mm, I={inten[i]}) ");
+            //    else
+            //        Console.Write($"({ang:F1}°, {dist[i]}mm) ");
+            //}
+            //Console.WriteLine();
+        }
+
+        public async void StopOnline()
         {
             if (!IsOnlineMode)
                 return;
             
             _CamController.DisconnectAll();
+            for (int i = 0; i < _Lasers.Length; i++)
+            {
+                if (!_Lasers[i].IsConnected)
+                    return;
+                await _Lasers[i].DisconnectAsync();
+                _Lasers[i].FrameReceived -= _Laser_FrameReceived;
+            }
 
             IsOnlineMode = false;
             Logger.Instance.Print(Logger.LogLevel.INFO, $"Online 모드 정지", true);
@@ -103,6 +145,26 @@ namespace PRND_InfraredCapture.Models
             Logger.Instance.Print(Logger.LogLevel.INFO, $"최대 높이: {maxHeight} mm", true);
         }
 
+        public void GetDistancebyLaser(ModuleIndex index)
+        {
+            if (!IsOnlineMode)
+                return;
+
+            // 원하는 시점에 캡처
+            var res = _Lasers[(int)index].CaptureMinAvgAsync(frames: 10, window: 5,
+                                                roiStart: null, roiEnd: null, stride: 1,
+                                                ignoreZero: false)
+                            .GetAwaiter().GetResult();
+
+            MessageBox.Show($"Min Avg Distance: {res.AvgDistanceMm} mm at Angle: {res.AngleDeg}° over {res.FramesConsidered} frames starting from index {res.StartIndex}");
+
+        }
+        public void StopAllLaserScan()
+        {
+            for (int i = 0; i < _Lasers.Length; i++)
+                _Lasers[i].Stop();
+        }
+
         public void ConnectCam()
         {
             if (!IsOnlineMode)
@@ -114,7 +176,7 @@ namespace PRND_InfraredCapture.Models
                     if (string.IsNullOrEmpty(SystemParam.CamPathList[i]))
                         Logger.Instance.Print(Logger.LogLevel.ERROR, $"Cam{i + 1} 경로가 설정되지 않았습니다.", true);
 
-                    _CamController.Connect((CamIndex)i);
+                    _CamController.Connect((ModuleIndex)i);
 
                     
                 }
@@ -136,7 +198,7 @@ namespace PRND_InfraredCapture.Models
             try
             {
                 for (int i = 0; i < SystemParam.CamPathList.Count; i++)
-                    _CamController?.CaptureImage((CamIndex)i, 80, SystemParam.ImageDataSavePath);
+                    _CamController?.CaptureImage((ModuleIndex)i, 240, SystemParam.ImageDataSavePath);
             }
             catch (Exception ex)
             {

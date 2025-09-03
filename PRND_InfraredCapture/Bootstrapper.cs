@@ -26,6 +26,7 @@ namespace PRND_InfraredCapture
             services.AddTransient<MainViewModel>();
             services.AddTransient<HomeViewModel>();
             services.AddTransient<SettingViewModel>();
+            services.AddTransient<TestViewModel>();
 
             return services.BuildServiceProvider();
         }

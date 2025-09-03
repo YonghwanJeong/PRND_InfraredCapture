@@ -65,40 +65,8 @@ namespace PRND_InfraredCapture.ViewModels
         public ObservableCollection<string> SupportedICamfileExtensions { get; set; } = new ObservableCollection<string> { "xml"};
 
         public ObservableCollection<FilePathModel> CamPathList { get; set; } = new ObservableCollection<FilePathModel>();
-
-
-        //private string _Cam1ConfigPath;
-        //public string Cam1ConfigPath
-        //{
-        //    get { return _Cam1ConfigPath; }
-        //    set { SetProperty(ref _Cam1ConfigPath, value); }
-        //}
-
-
-        //private string _Cam2ConfigPath;
-        //public string Cam2ConfigPath
-        //{
-        //    get { return _Cam2ConfigPath; }
-        //    set { SetProperty(ref _Cam2ConfigPath, value); }
-        //}
-
-
-        //private string _Cam3ConfigPath;
-        //public string Cam3ConfigPath
-        //{
-        //    get { return _Cam3ConfigPath; }
-        //    set { SetProperty(ref _Cam3ConfigPath, value); }
-        //}
-
-
-        //private string _Cam4ConfigPath;
-        //public string Cam4ConfigPath
-        //{
-        //    get { return _Cam4ConfigPath; }
-        //    set { SetProperty(ref _Cam4ConfigPath, value); }
-        //}
-
-
+        public ObservableCollection<TCPConnectionPoint> LaserConnectionList { get; set; } = new ObservableCollection<TCPConnectionPoint>();
+        public ObservableCollection<TCPConnectionPoint> RobotConnectionList { get; set; } = new ObservableCollection<TCPConnectionPoint>();
 
         private string _ImageDataSavePath;
         public string ImageDataSavePath
@@ -111,6 +79,12 @@ namespace PRND_InfraredCapture.ViewModels
 
         public ICommand AddCamCommand { get; set; }
         public ICommand DelCamCommand { get; set; }
+        public ICommand AddLaserCommand { get; set; }
+        public ICommand DelLaserCommand { get; set; }
+        public ICommand AddRobotCommand { get; set; }
+        public ICommand DelRobotCommand { get; set; }
+        
+
 
 
         private ProcessManager _ProcessManager = ProcessManager.Instance;
@@ -124,11 +98,15 @@ namespace PRND_InfraredCapture.ViewModels
             InitAvailableSerialPort();
             AddCamCommand = new RelayCommand(OnAddCam);
             DelCamCommand = new RelayCommand(OnDelCam);
-
+            AddLaserCommand = new RelayCommand(OnAddLaser);
+            DelLaserCommand = new RelayCommand(OnDelLaser);
+            AddRobotCommand = new RelayCommand(OnAddRobot);
+            DelRobotCommand = new RelayCommand(OnDelRobot);
 
             UpdateParam2UI();
 
         }
+
         public void Initialize()
         {
             
@@ -166,6 +144,27 @@ namespace PRND_InfraredCapture.ViewModels
 
         }
 
+        private void OnDelLaser()
+        {
+            LaserConnectionList.RemoveAt(LaserConnectionList.Count - 1);
+        }
+
+        private void OnAddLaser()
+        {
+            LaserConnectionList.Add(new TCPConnectionPoint { IPAddress = "", Port = 0 });
+        }
+
+        private void OnDelRobot()
+        {
+            RobotConnectionList.RemoveAt(RobotConnectionList.Count - 1);
+        }
+
+        private void OnAddRobot()
+        {
+            RobotConnectionList.Add(new TCPConnectionPoint { IPAddress = "", Port = 0 });
+        }
+
+
         private void UpdateUI2Param()
         {
             _ProcessManager.SystemParam.PLCAddress = PLCAddress;
@@ -175,6 +174,8 @@ namespace PRND_InfraredCapture.ViewModels
             _ProcessManager.SystemParam.LightCurtainHeightOffset = LightCurtainHeightOffset;
             _ProcessManager.SystemParam.CamPathList = CamPathList.Select(item => item.FilePath).ToList();
             _ProcessManager.SystemParam.ImageDataSavePath = ImageDataSavePath;
+            _ProcessManager.SystemParam.LaserConnectionList = LaserConnectionList.ToList();
+            _ProcessManager.SystemParam.RobotConnectionList= RobotConnectionList.ToList();
 
             _ProcessManager.SaveSystemParameter();
         }
@@ -188,6 +189,12 @@ namespace PRND_InfraredCapture.ViewModels
             LightCurtainHeightOffset = _ProcessManager.SystemParam.LightCurtainHeightOffset ;
             CamPathList.Clear();
             _ProcessManager.SystemParam.CamPathList.Select(p=> new FilePathModel { FilePath = p }).ToList().ForEach(p => CamPathList.Add(p));
+            LaserConnectionList.Clear();
+            foreach (var item in _ProcessManager.SystemParam.LaserConnectionList)
+                LaserConnectionList.Add(item);
+            RobotConnectionList.Clear();
+            foreach (var item in _ProcessManager.SystemParam.RobotConnectionList)
+                RobotConnectionList.Add(item);
             ImageDataSavePath = _ProcessManager.SystemParam.ImageDataSavePath;
         }
 

@@ -14,6 +14,7 @@ namespace PRND_InfraredCapture.Locators
         public MainViewModel MainViewModel => Ioc.Default.GetService<MainViewModel>();
         public HomeViewModel HomeViewModel => Ioc.Default.GetService<HomeViewModel>();
         public SettingViewModel SettingViewModel => Ioc.Default.GetService<SettingViewModel>();
+        public TestViewModel TestViewModel => Ioc.Default.GetService<TestViewModel>();
 
     }
 }

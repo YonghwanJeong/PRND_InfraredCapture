@@ -20,6 +20,22 @@ namespace PRND_InfraredCapture.Models
         }
         public string FileName => Path.GetFileNameWithoutExtension(FilePath);
     }
+
+    public class TCPConnectionPoint : ObservableObject
+    {
+        private string _ipAddress;
+        public string IPAddress
+        {
+            get => _ipAddress;
+            set => SetProperty(ref _ipAddress, value);
+        }
+        private int _port;
+        public int Port
+        {
+            get => _port;
+            set => SetProperty(ref _port, value);
+        }
+    }
     public class SystemParameter : Parameter
     {
         //PLC
@@ -42,6 +58,11 @@ namespace PRND_InfraredCapture.Models
         //InfraredCam
         public List<string> CamPathList { get; set; } = new List<string>();
         public string ImageDataSavePath { get; set; }
+
+        public List<TCPConnectionPoint> LaserConnectionList { get; set; } = new List<TCPConnectionPoint>();
+
+
+        public List<TCPConnectionPoint> RobotConnectionList { get; set; } = new List<TCPConnectionPoint>();
 
     }
 }

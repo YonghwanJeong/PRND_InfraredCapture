@@ -5,7 +5,9 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Imaging;
+using System.Globalization;
 using System.Security.Cryptography;
+using System.Text;
 using static System.Net.Mime.MediaTypeNames;
 
 
@@ -43,7 +45,7 @@ namespace CP.OptrisCam.models
         private string _ConfigFilePath;
         private string _SaveFolderPath = "";
         private AcquisitionAngle _AcquisitionAngle = AcquisitionAngle.Angle_0;
-        private CamIndex _CamIndex;
+        private ModuleIndex _CamIndex;
         private int _FrameCount = 80;
 
 
@@ -65,7 +67,7 @@ namespace CP.OptrisCam.models
         private readonly ManualResetEventSlim _burstDone = new(false); // 80장 수집 완료 신호
 
         /// <summary>Constructor</summary>
-        public IRImagerShow(CamIndex camIndex, string configPath)
+        public IRImagerShow(ModuleIndex camIndex, string configPath)
         {
             // Instantiate an imager object. It will serve as the main interface to the SDK
             Imager = IRImagerFactory.getInstance().create("native");
@@ -158,7 +160,7 @@ namespace CP.OptrisCam.models
             _FrameQueue = new ConcurrentQueue<CapturedFrame>();
             
             Volatile.Write(ref _RemainingFrameCount, frameCount);
-            CamLogger.Instance.Print(CamLogger.LogLevel.INFO, $"{Enum.GetName(typeof(CamIndex), _CamIndex)} Start Capture", true);
+            CamLogger.Instance.Print(CamLogger.LogLevel.INFO, $"{Enum.GetName(typeof(ModuleIndex), _CamIndex)}Cam Start Capture", true);
             // Start camera acquisition
 
         }
@@ -219,7 +221,7 @@ namespace CP.OptrisCam.models
                 if (after == 0)
                 {
                     _burstDone.Set();
-                    CamLogger.Instance.Print(CamLogger.LogLevel.INFO, $"{Enum.GetName(typeof(CamIndex), _CamIndex)} Capture Done ({_FrameCount}Frame)", true);
+                    CamLogger.Instance.Print(CamLogger.LogLevel.INFO, $"{Enum.GetName(typeof(ModuleIndex), _CamIndex)}Cam Capture Done ({_FrameCount}Frame)", true);
                 }
             }
         }
@@ -232,9 +234,11 @@ namespace CP.OptrisCam.models
 
                     string time = $"{frame.Timestamp:yyyy-MM-dd-HH-mm-ss-fff}";
                     string imageName = $"{frame.FrameIndex}_{time}.bmp";
-                    string imageSavePath = Path.Combine(_SaveFolderPath, Enum.GetName(typeof(CamIndex), _CamIndex),"Image", imageName);
+                    string imageSavePath = Path.Combine(_SaveFolderPath, Enum.GetName(typeof(ModuleIndex), _CamIndex),"Image", imageName);
                     string rawName = $"{frame.FrameIndex}_{time}.raw";
-                    string rawSavePath = Path.Combine(_SaveFolderPath, Enum.GetName(typeof(CamIndex), _CamIndex), "Raw", rawName);
+                    string rawSavePath = Path.Combine(_SaveFolderPath, Enum.GetName(typeof(ModuleIndex), _CamIndex), "Raw", rawName);
+                    string csvName = $"{frame.FrameIndex}_{time}.csv";
+                    string csvSavePath= Path.Combine(_SaveFolderPath, Enum.GetName(typeof(ModuleIndex), _CamIndex), "csv", csvName);
                     int width = frame.Frame.getWidth();
                     int height = frame.Frame.getHeight();
 
@@ -248,7 +252,8 @@ namespace CP.OptrisCam.models
                     float[] temperature = new float[data.Length];
                     for (int i = 0; i < data.Length; i++)
                         temperature[i] = converter.toTemperature(data[i]);
-                    
+
+                    SaveTemperatureCsv(csvSavePath, temperature, width, height);
 
                     var rotated = ThermalRotate.RotateTemperature(temperature, width, height, (int)_AcquisitionAngle);
                     SaveAsRawFloatBigEndian(rawSavePath, rotated);
@@ -297,9 +302,52 @@ namespace CP.OptrisCam.models
                     }
                 }
             }
-            CamLogger.Instance.Print(CamLogger.LogLevel.INFO, $"{DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff")} : Thread 종료");
+            CamLogger.Instance.Print(CamLogger.LogLevel.INFO, $"{Enum.GetName(typeof(ModuleIndex), _CamIndex)}Cam Thread 종료");
 
         }
+
+        public void SaveTemperatureCsv(string filePath, float[] temperature, int width, int height, int decimals = 2)
+        {
+            if (temperature == null) throw new ArgumentNullException(nameof(temperature));
+            if (temperature.Length != width * height)
+                throw new ArgumentException("temperature.Length != width*height");
+
+            var inv = CultureInfo.InvariantCulture;
+            var dir = Path.GetDirectoryName(filePath);
+            if (!string.IsNullOrEmpty(dir))
+                Directory.CreateDirectory(dir);
+
+            // 큰 파일을 고려해 한 줄씩 바로바로 기록
+            using (var sw = new StreamWriter(filePath, false, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false)))
+            {
+                // 필요하면 헤더(옵션)
+                // sw.WriteLine($"WIDTH={width},HEIGHT={height}");
+
+                var sb = new StringBuilder(capacity: Math.Max(16 * width, 1024));
+                string fmt = "F" + Math.Max(0, decimals);
+
+                for (int y = 0; y < height; y++)
+                {
+                    sb.Clear();
+                    int rowStart = y * width;
+
+                    // 첫 값
+                    sb.Append(temperature[rowStart].ToString(fmt, inv));
+
+                    // 나머지 값들
+                    for (int x = 1; x < width; x++)
+                    {
+                        float t = temperature[rowStart + x];
+                        sb.Append(',');
+                        sb.Append(t.ToString(fmt, inv));
+                    }
+
+                    sw.WriteLine(sb.ToString());
+                }
+            }
+        }
+
+
         public void SaveAsRawFloatBigEndian(string path, float[] data)
         {
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
@@ -324,7 +372,7 @@ namespace CP.OptrisCam.models
             lock (flagState)
             {
                 flagState = flagStateIn.ToString();
-                CamLogger.Instance.Print(CamLogger.LogLevel.INFO, $"{DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff")} :  {flagState}");
+                CamLogger.Instance.Print(CamLogger.LogLevel.INFO, $"{Enum.GetName(typeof(ModuleIndex), _CamIndex)}Cam Flag State {flagState}");
             }
         }
 
@@ -333,12 +381,14 @@ namespace CP.OptrisCam.models
         {
          
             IsConnectionLost = true;
+            CamLogger.Instance.Print(CamLogger.LogLevel.WARN, $"{_CamIndex} Connection Lost", true);
         }
 
         // <summary>Called when the SDK has not received frames from the camera for a while.</summary>
         public override void onConnectionTimeout()
         {
             IsConnectionLost = true;
+            CamLogger.Instance.Print(CamLogger.LogLevel.WARN, $"{Enum.GetName(typeof(ModuleIndex), _CamIndex)}Cam Connection Timeout. Connection Lost",true);
         }
     }
 }

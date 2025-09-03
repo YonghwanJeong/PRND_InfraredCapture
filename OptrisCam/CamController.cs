@@ -5,12 +5,12 @@ using Optris.OtcSDK;
 
 namespace CP.OptrisCam
 {
-    public enum CamIndex
+    public enum ModuleIndex
     {
-        CAM1 = 0,
-        CAM2 = 1,
-        CAM3 = 2,
-        CAM4 = 3,
+        Module1 = 0,
+        Module2 = 1,
+        Module3 = 2,
+        Module4 = 3,
     }
 
     public class CamController : IDisposable
@@ -21,8 +21,6 @@ namespace CP.OptrisCam
         private IRImagerShow[] _OptrisCams;
         
 
-        int tickCount = 0;
-
         public Action<Bitmap> OnReceiveImageAction { get; set; }
         public Action<int> OnUpdateGrabCount{ get; set; }
 
@@ -32,40 +30,40 @@ namespace CP.OptrisCam
 
             for (int i = 0; i < camFileList.Count; i++)
             {
-                _OptrisCams[i] = new IRImagerShow((CamIndex)i, camFileList[i]);
+                _OptrisCams[i] = new IRImagerShow((ModuleIndex)i, camFileList[i]);
             }
         }
 
-        public void Connect(CamIndex camIndex)
+        public void Connect(ModuleIndex camIndex)
         {
             try
             {
                 _OptrisCams[(int)camIndex].Disconnect();
                 _OptrisCams[(int)camIndex].Connect();
-                CamLogger.Instance.Print(CamLogger.LogLevel.INFO, $"{Enum.GetName(typeof(CamIndex), camIndex)} Connected", true);
+                CamLogger.Instance.Print(CamLogger.LogLevel.INFO, $"{Enum.GetName(typeof(ModuleIndex), camIndex)} Connected", true);
             }
             catch (SDKException ex)
             {
-                CamLogger.Instance.Print(CamLogger.LogLevel.ERROR, $"{Enum.GetName(typeof(CamIndex), camIndex)} Connect Error: {ex.Message}", true);
+                CamLogger.Instance.Print(CamLogger.LogLevel.ERROR, $"{Enum.GetName(typeof(ModuleIndex), camIndex)} Connect Error: {ex.Message}", true);
             }
         }
 
-        public void CaptureImage(CamIndex index, int framecnt, string savePath)
+        public void CaptureImage(ModuleIndex index, int framecnt, string savePath)
         {
             if (_OptrisCams[(int)index].IsConnected)
                 _OptrisCams[(int)index].StartImageCapture(framecnt, savePath);
         }
-        public void Disconnect(CamIndex camIndex)
+        public void Disconnect(ModuleIndex camIndex)
         {
             if (!_OptrisCams[(int)camIndex].IsConnected)
                 return;
             _OptrisCams[(int)camIndex].Disconnect();
-            CamLogger.Instance.Print(CamLogger.LogLevel.INFO, $"{Enum.GetName(typeof(CamIndex), camIndex)} Disconnected", true);
+            CamLogger.Instance.Print(CamLogger.LogLevel.INFO, $"{Enum.GetName(typeof(ModuleIndex), camIndex)} Disconnected", true);
         }
         public void DisconnectAll()
         {
             for(int i = 0; i < _OptrisCams.Length; i++)
-                Disconnect((CamIndex)i);
+                Disconnect((ModuleIndex)i);
         }
 
         public void StartImageLoop()

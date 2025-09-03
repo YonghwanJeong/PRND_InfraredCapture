@@ -28,6 +28,7 @@
     <LangVersion>7.3</LangVersion>
     <ErrorReport>prompt</ErrorReport>
     <Prefer32Bit>true</Prefer32Bit>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|x64'">
     <OutputPath>..\build\Release\</OutputPath>
@@ -38,6 +39,7 @@
     <LangVersion>7.3</LangVersion>
     <ErrorReport>prompt</ErrorReport>
     <Prefer32Bit>true</Prefer32Bit>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="CommunityToolkit.Mvvm, Version=8.4.0.0, Culture=neutral, PublicKeyToken=4aff67a105548ee2, processorArchitecture=MSIL">
@@ -108,15 +110,21 @@
     <Compile Include="Bases\ViewModelBase.cs" />
     <Compile Include="Locators\ViewModelLocator.cs" />
     <Compile Include="Models\BusyMessage.cs" />
+    <Compile Include="Models\LeuzeMdiClient.cs" />
     <Compile Include="Models\LightCurtainComm.cs" />
     <Compile Include="Models\NavigationMessage.cs" />
     <Compile Include="Models\ProcessManager.cs" />
     <Compile Include="Models\SystemParameter.cs" />
+    <Compile Include="Models\ThermalImageUtil.cs" />
     <Compile Include="ViewModels\HomeViewModel.cs" />
     <Compile Include="ViewModels\MainViewModel.cs" />
     <Compile Include="ViewModels\SettingViewModel.cs" />
+    <Compile Include="ViewModels\TestViewModel.cs" />
     <Compile Include="Views\SettingPage.xaml.cs">
       <DependentUpon>SettingPage.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Views\TestPage.xaml.cs">
+      <DependentUpon>TestPage.xaml</DependentUpon>
     </Compile>
     <Page Include="Views\HomePage.xaml">
       <SubType>Designer</SubType>
@@ -139,6 +147,10 @@
       <SubType>Code</SubType>
     </Compile>
     <Page Include="Views\SettingPage.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="Views\TestPage.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>

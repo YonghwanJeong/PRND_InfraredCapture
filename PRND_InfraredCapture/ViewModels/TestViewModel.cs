@@ -1,23 +1,26 @@
 ﻿using CommunityToolkit.Mvvm.Input;
 using CP.Common;
-using CP.OptrisCam.models;
 using PRND_InfraredCapture.Bases;
 using PRND_InfraredCapture.Models;
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Drawing;
-using System.Threading;
+using System.Drawing.Imaging;
+using System.IO;
+using System.Linq;
+using System.Runtime.InteropServices.ComTypes;
+using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
-using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media.Imaging;
+using System.Windows.Media.Media3D;
 
 namespace PRND_InfraredCapture.ViewModels
 {
-    public class HomeViewModel : ViewModelBase
+    public class TestViewModel : ViewModelBase
     {
-
         public ObservableCollection<string> ProgramLogs { get; set; } = Logger.Instance.ProgramLogs;
 
         private BitmapSource _TestImage;
@@ -35,6 +38,22 @@ namespace PRND_InfraredCapture.ViewModels
             set { SetProperty(ref _OnOfflineBtnText, value); }
         }
 
+
+        private string _RawSourcePath;
+        public string RawSourcePath
+        {
+            get { return _RawSourcePath; }
+            set { SetProperty(ref _RawSourcePath, value); }
+        }
+
+
+        private string _ConvertTargetPath;
+        public string ConvertTargetPath
+        {
+            get { return _ConvertTargetPath; }
+            set { SetProperty(ref _ConvertTargetPath, value); }
+        }
+
         //public ICommand TestCommand { get; set; }
         public ICommand ControlOnOffLineCommand { get; set; }
         public ICommand CaptureImageCommand { get; set; }
@@ -43,6 +62,7 @@ namespace PRND_InfraredCapture.ViewModels
         public ICommand LightCurtainStopCommand { get; set; }
         public ICommand LaserStartCommand { get; set; }
         public ICommand LaserStopCommand { get; set; }
+        public ICommand ConvertRawToBitmapCommand { get; set; }
 
 
         private static bool _IsFirstLoaded = true;
@@ -51,8 +71,7 @@ namespace PRND_InfraredCapture.ViewModels
         private int tickCount = 0;
         private ProcessManager _ProcessManager = ProcessManager.Instance;
 
-
-        public HomeViewModel()
+        public TestViewModel()
         {
             Title = "Home";
             OnOfflineBtnText = "Start Online";
@@ -63,12 +82,44 @@ namespace PRND_InfraredCapture.ViewModels
             LightCurtainStopCommand = new RelayCommand(OnStopLightCurtain);
             LaserStartCommand = new RelayCommand(OnLaserStartCommand);
             LaserStopCommand = new RelayCommand(OnLaserStopCommand);
+            ConvertRawToBitmapCommand = new RelayCommand(OnConvertRawToBitmapCommand);
             if (_IsFirstLoaded) Initialize();
             ChaningEvent();
-
-            //Test();
-
         }
+
+        private void OnConvertRawToBitmapCommand()
+        {
+
+            var filePaths = Directory.GetFiles(RawSourcePath, "*.raw")
+                             .OrderBy(p => Path.GetFileNameWithoutExtension(p))
+                             .ToList();
+
+            int width = 382;
+            int height = 288;
+            //int width = 288;
+            //int height = 384;
+            int i = 0;
+            //단순 이미지 반환
+            //foreach (var filePath in filePaths)
+            //{
+            //    var data = ThermalImageUtil.BuildGrayscaleBitmapFromFloatRaw(filePath,width,height);
+            //    string imagepath = Path.Combine(ConvertTargetPath, "Image", $"{i.ToString()}.png");
+            //    Directory.CreateDirectory(Path.GetDirectoryName(imagepath));
+            //    data.Save(imagepath,ImageFormat.Png);
+            //    i++;
+            //}
+
+            //차이미지 반환
+            foreach (var filePath in filePaths)
+            {
+                var data = ThermalImageUtil.BuildDiffGray8FromFloatRaw(filePath, filePaths[0], width, height,0,5);
+                string imagepath = Path.Combine(ConvertTargetPath, "DiffImage", $"{i.ToString()}.png");
+                Directory.CreateDirectory(Path.GetDirectoryName(imagepath));
+                data.Save(imagepath, ImageFormat.Png);
+                i++;
+            }
+        }
+
         public void ChaningEvent()
         {
             Logger.Instance.OnLogSavedAction += OnLogSaved;
@@ -103,7 +154,7 @@ namespace PRND_InfraredCapture.ViewModels
                 OnOfflineBtnText = "Start Online";
                 Logger.Instance.Print(Logger.LogLevel.INFO, "Change to Offline Mode");
             }
-            
+
         }
         private void OnStartLightCurtain()
         {

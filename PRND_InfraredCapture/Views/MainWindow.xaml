@@ -27,6 +27,7 @@
             <ui:NavigationView.MenuItems>
                 <ui:NavigationViewItem Content="Home" Icon="{ui:SymbolIcon Home24}" TargetPageType="{x:Type views:HomePage}"/>
                 <ui:NavigationViewItem Content="Setting" Icon="{ui:SymbolIcon Settings24}" TargetPageType="{x:Type views:SettingPage}"/>
+                <ui:NavigationViewItem Content="Test" Icon="{ui:SymbolIcon Beaker24}" TargetPageType="{x:Type views:TestPage}"/>
             </ui:NavigationView.MenuItems>
         </ui:NavigationView>
     </Grid>
