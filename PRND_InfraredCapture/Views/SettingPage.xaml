@@ -35,18 +35,169 @@
                             <TextBox Text="{Binding PLCPort}" Grid.Column="1"/>
                         </Grid>
                     </Grid>
-                    <GroupBox Header="PLC to Vision" Margin="5">
-                        <StackPanel>
-                            <Grid Margin="5">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="2*"/>
-                                    <ColumnDefinition Width="3*"/>
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Text="Start / Trigger / End : " Grid.Column="0" VerticalAlignment="Center" />
-                                <TextBox Text="{Binding CommandStartAddress, UpdateSourceTrigger=PropertyChanged}" Grid.Column="1"/>
-                            </Grid>
-                        </StackPanel>
+                    <!-- PLC to PC -->
+                    <GroupBox Header="PLC to PC" Margin="5">
+                        <Grid Margin="5">
+                            <Grid.Resources>
+                                <!-- 줄간격 최소화 -->
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="VerticalAlignment" Value="Center"/>
+                                    <Setter Property="Margin" Value="0,2,6,2"/>
+                                    <Setter Property="FontSize" Value="14"/>
+                                </Style>
+                                <Style TargetType="TextBox">
+                                    <Setter Property="VerticalAlignment" Value="Center"/>
+                                    <Setter Property="Margin" Value="0,2,0,2"/>
+                                    <Setter Property="FontSize" Value="14"/>
+                                    <Setter Property="MinHeight" Value="35"/>
+                                    <Setter Property="VerticalContentAlignment" Value="Center"/>
+                                </Style>
+                            </Grid.Resources>
+
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="2*"/>
+                                <ColumnDefinition Width="3*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <!-- 행 정의: 항목 수만큼 Auto -->
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <!-- 0 -->
+                                <RowDefinition Height="Auto"/>
+                                <!-- 1 -->
+                                <RowDefinition Height="Auto"/>
+                                <!-- 2 -->
+                                <RowDefinition Height="Auto"/>
+                                <!-- 3 -->
+                                <RowDefinition Height="Auto"/>
+                                <!-- 4 -->
+                                <RowDefinition Height="Auto"/>
+                                <!-- 5 -->
+                                <RowDefinition Height="Auto"/>
+                                <!-- 6 -->
+                                <RowDefinition Height="Auto"/>
+                                <!-- 7 -->
+                                <RowDefinition Height="Auto"/>
+                                <!-- 8 -->
+                                <RowDefinition Height="Auto"/>
+                                <!-- 9 -->
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Text="PLC Status Address:" Grid.Row="0" Grid.Column="0"/>
+                            <TextBox  Text="{Binding PLCStatusAddress, Mode=TwoWay}" Grid.Row="0" Grid.Column="1"/>
+
+                            <TextBlock Text="Turn Table Angle Address:" Grid.Row="1" Grid.Column="0"/>
+                            <TextBox  Text="{Binding TurnTableAngleAddress, Mode=TwoWay}" Grid.Row="1" Grid.Column="1"/>
+
+                            <TextBlock Text="Light1 Status Address:" Grid.Row="2" Grid.Column="0"/>
+                            <TextBox  Text="{Binding Light1StatusAddress, Mode=TwoWay}" Grid.Row="2" Grid.Column="1"/>
+
+                            <TextBlock Text="Light2 Status Address:" Grid.Row="3" Grid.Column="0"/>
+                            <TextBox  Text="{Binding Light2StatusAddress, Mode=TwoWay}" Grid.Row="3" Grid.Column="1"/>
+
+                            <TextBlock Text="Light3 Status Address:" Grid.Row="4" Grid.Column="0"/>
+                            <TextBox  Text="{Binding Light3StatusAddress, Mode=TwoWay}" Grid.Row="4" Grid.Column="1"/>
+
+                            <TextBlock Text="Light4 Status Address:" Grid.Row="5" Grid.Column="0"/>
+                            <TextBox  Text="{Binding Light4StatusAddress, Mode=TwoWay}" Grid.Row="5" Grid.Column="1"/>
+
+                            <TextBlock Text="Robot1 Status Address:" Grid.Row="6" Grid.Column="0"/>
+                            <TextBox  Text="{Binding Robot1StatusAddress, Mode=TwoWay}" Grid.Row="6" Grid.Column="1"/>
+
+                            <TextBlock Text="Robot2 Status Address:" Grid.Row="7" Grid.Column="0"/>
+                            <TextBox  Text="{Binding Robot2StatusAddress, Mode=TwoWay}" Grid.Row="7" Grid.Column="1"/>
+
+                            <TextBlock Text="Robot3 Status Address:" Grid.Row="8" Grid.Column="0"/>
+                            <TextBox  Text="{Binding Robot3StatusAddress, Mode=TwoWay}" Grid.Row="8" Grid.Column="1"/>
+
+                            <TextBlock Text="Robot4 Status Address:" Grid.Row="9" Grid.Column="0"/>
+                            <TextBox  Text="{Binding Robot4StatusAddress, Mode=TwoWay}" Grid.Row="9" Grid.Column="1"/>
+                        </Grid>
                     </GroupBox>
+
+                    <!-- PC to PLC -->
+                    <GroupBox Header="PC to PLC" Margin="5">
+                        <Grid Margin="5">
+                            <Grid.Resources>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="VerticalAlignment" Value="Center"/>
+                                    <Setter Property="Margin" Value="0,2,6,2"/>
+                                    <Setter Property="FontSize" Value="14"/>
+                                </Style>
+                                <Style TargetType="TextBox">
+                                    <Setter Property="VerticalAlignment" Value="Center"/>
+                                    <Setter Property="Margin" Value="0,2,0,2"/>
+                                    <Setter Property="FontSize" Value="14"/>
+                                    <Setter Property="MinHeight" Value="35"/>
+                                    <Setter Property="VerticalContentAlignment" Value="Center"/>
+                                </Style>
+                            </Grid.Resources>
+
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="2*"/>
+                                <ColumnDefinition Width="3*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <!-- 0 -->
+                                <RowDefinition Height="Auto"/>
+                                <!-- 1 -->
+                                <RowDefinition Height="Auto"/>
+                                <!-- 2 -->
+                                <RowDefinition Height="Auto"/>
+                                <!-- 3 -->
+                                <RowDefinition Height="Auto"/>
+                                <!-- 4 -->
+                                <RowDefinition Height="Auto"/>
+                                <!-- 5 -->
+                                <RowDefinition Height="Auto"/>
+                                <!-- 6 -->
+                                <RowDefinition Height="Auto"/>
+                                <!-- 7 -->
+                                <RowDefinition Height="Auto"/>
+                                <!-- 8 -->
+                                <RowDefinition Height="Auto"/>
+                                <!-- 9 -->
+                                <RowDefinition Height="Auto"/>
+                                <!-- 10 -->
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Text="Heartbeat Address:" Grid.Row="0" Grid.Column="0"/>
+                            <TextBox  Text="{Binding HeartBeatAddress, Mode=TwoWay}" Grid.Row="0" Grid.Column="1"/>
+                            
+                            <TextBlock Text="PLC Response Address:" Grid.Row="1" Grid.Column="0"/>
+                            <TextBox  Text="{Binding PLCResponseAddress, Mode=TwoWay}" Grid.Row="1" Grid.Column="1"/>
+                            
+                            <TextBlock Text="Module1 Light On Address:" Grid.Row="2" Grid.Column="0"/>
+                            <TextBox  Text="{Binding Module1LightOnAddress, Mode=TwoWay}" Grid.Row="2" Grid.Column="1"/>
+
+                            <TextBlock Text="Module2 Light On Address:" Grid.Row="3" Grid.Column="0"/>
+                            <TextBox  Text="{Binding Module2LightOnAddress, Mode=TwoWay}" Grid.Row="3" Grid.Column="1"/>
+
+                            <TextBlock Text="Module3 Light On Address:" Grid.Row="4" Grid.Column="0"/>
+                            <TextBox  Text="{Binding Module3LightOnAddress, Mode=TwoWay}" Grid.Row="4" Grid.Column="1"/>
+
+                            <TextBlock Text="Module4 Light On Address:" Grid.Row="5" Grid.Column="0"/>
+                            <TextBox  Text="{Binding Module4LightOnAddress, Mode=TwoWay}" Grid.Row="5" Grid.Column="1"/>
+
+                            <TextBlock Text="Robot1 Move Address:" Grid.Row="6" Grid.Column="0"/>
+                            <TextBox  Text="{Binding Robot1MoveAddress, Mode=TwoWay}" Grid.Row="6" Grid.Column="1"/>
+
+                            <TextBlock Text="Robot2 Move Address:" Grid.Row="7" Grid.Column="0"/>
+                            <TextBox  Text="{Binding Robot2MoveAddress, Mode=TwoWay}" Grid.Row="7" Grid.Column="1"/>
+
+                            <TextBlock Text="Robot3 Move Address:" Grid.Row="8" Grid.Column="0"/>
+                            <TextBox  Text="{Binding Robot3MoveAddress, Mode=TwoWay}" Grid.Row="8" Grid.Column="1"/>
+
+                            <TextBlock Text="Robot4 Move Address:" Grid.Row="9" Grid.Column="0"/>
+                            <TextBox  Text="{Binding Robot4MoveAddress, Mode=TwoWay}" Grid.Row="9" Grid.Column="1"/>
+
+                            <TextBlock Text="Distance Alarm Address:" Grid.Row="10" Grid.Column="0"/>
+                            <TextBox  Text="{Binding DistanceAlarmAddress, Mode=TwoWay}" Grid.Row="10" Grid.Column="1"/>
+                        </Grid>
+                    </GroupBox>
+
                 </StackPanel>
             </GroupBox>
 
@@ -197,6 +348,15 @@
                         </ItemsControl>
                     </ScrollViewer>
                 </StackPanel>
+            </GroupBox>
+        </StackPanel>
+        <StackPanel Grid.Column="2">
+            <GroupBox Header="Program Log" Margin="10" >
+                <ListBox BorderThickness="1" ItemsSource="{Binding ProgramLogs, Mode=OneWay}"  Margin="5" FontSize="4" Height="300">
+                    <i:Interaction.Behaviors>
+                        <behaviors:ScrollIntoViewBehavior/>
+                    </i:Interaction.Behaviors>
+                </ListBox>
             </GroupBox>
         </StackPanel>
     </Grid>

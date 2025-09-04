@@ -32,6 +32,8 @@ namespace PRND_InfraredCapture.Models
         private Task _rxTask;
         private int _MaxHeight = 0;
 
+        private bool isRunning => _rxTask != null && !_rxTask.IsCompleted;
+
         public LightCurtainComm(string portName, int baudRate)
         {
             _PortName = portName;

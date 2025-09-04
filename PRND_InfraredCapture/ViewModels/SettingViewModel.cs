@@ -16,6 +16,8 @@ namespace PRND_InfraredCapture.ViewModels
 {
     public class SettingViewModel : ViewModelBase
     {
+        public ObservableCollection<string> ProgramLogs { get; set; } = Logger.Instance.ProgramLogs;
+
         #region PLC Address Field
         private string _pLCAddress;
         public string PLCAddress
@@ -30,6 +32,154 @@ namespace PRND_InfraredCapture.ViewModels
             get => _pLCPort;
             set => SetProperty(ref _pLCPort, value);
         }
+
+        private int _plcStatusAddress;
+        public int PLCStatusAddress
+        {
+            get => _plcStatusAddress;
+            set => SetProperty(ref _plcStatusAddress, value);
+        }
+
+        private int _turnTableAngleAddress;
+        public int TurnTableAngleAddress
+        {
+            get => _turnTableAngleAddress;
+            set => SetProperty(ref _turnTableAngleAddress, value);
+        }
+
+        private int _light1StatusAddress;
+        public int Light1StatusAddress
+        {
+            get => _light1StatusAddress;
+            set => SetProperty(ref _light1StatusAddress, value);
+        }
+
+        private int _light2StatusAddress;
+        public int Light2StatusAddress
+        {
+            get => _light2StatusAddress;
+            set => SetProperty(ref _light2StatusAddress, value);
+        }
+
+        private int _light3StatusAddress;
+        public int Light3StatusAddress
+        {
+            get => _light3StatusAddress;
+            set => SetProperty(ref _light3StatusAddress, value);
+        }
+
+        private int _light4StatusAddress;
+        public int Light4StatusAddress
+        {
+            get => _light4StatusAddress;
+            set => SetProperty(ref _light4StatusAddress, value);
+        }
+
+        private int _robot1StatusAddress;
+        public int Robot1StatusAddress
+        {
+            get => _robot1StatusAddress;
+            set => SetProperty(ref _robot1StatusAddress, value);
+        }
+
+        private int _robot2StatusAddress;
+        public int Robot2StatusAddress
+        {
+            get => _robot2StatusAddress;
+            set => SetProperty(ref _robot2StatusAddress, value);
+        }
+
+        private int _robot3StatusAddress;
+        public int Robot3StatusAddress
+        {
+            get => _robot3StatusAddress;
+            set => SetProperty(ref _robot3StatusAddress, value);
+        }
+
+        private int _robot4StatusAddress;
+        public int Robot4StatusAddress
+        {
+            get => _robot4StatusAddress;
+            set => SetProperty(ref _robot4StatusAddress, value);
+        }
+
+
+        private int _HeartBeatAddress;
+        public int HeartBeatAddress
+        {
+            get { return _HeartBeatAddress; }
+            set { SetProperty(ref _HeartBeatAddress, value); }
+        }
+        private int _plcResponseAddress;
+        public int PLCResponseAddress
+        {
+            get => _plcResponseAddress;
+            set => SetProperty(ref _plcResponseAddress, value);
+        }
+
+        private int _module1LightOnAddress;
+        public int Module1LightOnAddress
+        {
+            get => _module1LightOnAddress;
+            set => SetProperty(ref _module1LightOnAddress, value);
+        }
+
+        private int _module2LightOnAddress;
+        public int Module2LightOnAddress
+        {
+            get => _module2LightOnAddress;
+            set => SetProperty(ref _module2LightOnAddress, value);
+        }
+
+        private int _module3LightOnAddress;
+        public int Module3LightOnAddress
+        {
+            get => _module3LightOnAddress;
+            set => SetProperty(ref _module3LightOnAddress, value);
+        }
+
+        private int _module4LightOnAddress;
+        public int Module4LightOnAddress
+        {
+            get => _module4LightOnAddress;
+            set => SetProperty(ref _module4LightOnAddress, value);
+        }
+
+        private int _robot1MoveAddress;
+        public int Robot1MoveAddress
+        {
+            get => _robot1MoveAddress;
+            set => SetProperty(ref _robot1MoveAddress, value);
+        }
+
+        private int _robot2MoveAddress;
+        public int Robot2MoveAddress
+        {
+            get => _robot2MoveAddress;
+            set => SetProperty(ref _robot2MoveAddress, value);
+        }
+
+        private int _robot3MoveAddress;
+        public int Robot3MoveAddress
+        {
+            get => _robot3MoveAddress;
+            set => SetProperty(ref _robot3MoveAddress, value);
+        }
+
+        private int _robot4MoveAddress;
+        public int Robot4MoveAddress
+        {
+            get => _robot4MoveAddress;
+            set => SetProperty(ref _robot4MoveAddress, value);
+        }
+
+        private int _distanceAlarmAddress;
+        public int DistanceAlarmAddress
+        {
+            get => _distanceAlarmAddress;
+            set => SetProperty(ref _distanceAlarmAddress, value);
+        }
+
         #endregion
 
         #region LightCurtain
@@ -102,7 +252,7 @@ namespace PRND_InfraredCapture.ViewModels
             DelLaserCommand = new RelayCommand(OnDelLaser);
             AddRobotCommand = new RelayCommand(OnAddRobot);
             DelRobotCommand = new RelayCommand(OnDelRobot);
-
+            ChaningEvent();
             UpdateParam2UI();
 
         }
@@ -112,6 +262,25 @@ namespace PRND_InfraredCapture.ViewModels
             
 
             _IsFirstLoaded = false;
+        }
+
+        public void ChaningEvent()
+        {
+            Logger.Instance.OnLogSavedAction += OnLogSaved;
+            _ProcessManager.OnCamLogsaved += OnLogSaved;
+        }
+
+        public void DeChaningEvent()
+        {
+            Logger.Instance.OnLogSavedAction -= OnLogSaved;
+            _ProcessManager.OnCamLogsaved -= OnLogSaved;
+        }
+        private void OnLogSaved(string obj)
+        {
+            Application.Current?.Dispatcher.BeginInvoke(new Action(delegate ()
+            {
+                ProgramLogs.Add(obj);
+            }));
         }
 
         public void InitAvailableSerialPort()
@@ -169,6 +338,29 @@ namespace PRND_InfraredCapture.ViewModels
         {
             _ProcessManager.SystemParam.PLCAddress = PLCAddress;
             _ProcessManager.SystemParam.PLCPort = PLCPort;
+            _ProcessManager.SystemParam.PLCStatusAddress = PLCStatusAddress;
+            _ProcessManager.SystemParam.TurnTableAngleAddress = TurnTableAngleAddress;
+            _ProcessManager.SystemParam.Light1StatusAddress = Light1StatusAddress;
+            _ProcessManager.SystemParam.Light2StatusAddress = Light2StatusAddress;
+            _ProcessManager.SystemParam.Light3StatusAddress = Light3StatusAddress;
+            _ProcessManager.SystemParam.Light4StatusAddress = Light4StatusAddress;
+            _ProcessManager.SystemParam.Robot1StatusAddress = Robot1StatusAddress;
+            _ProcessManager.SystemParam.Robot2StatusAddress = Robot2StatusAddress;
+            _ProcessManager.SystemParam.Robot3StatusAddress = Robot3StatusAddress;
+            _ProcessManager.SystemParam.Robot4StatusAddress = Robot4StatusAddress;
+
+            _ProcessManager.SystemParam.HeartBeatAddress = HeartBeatAddress;
+            _ProcessManager.SystemParam.PLCResponseAddress = PLCResponseAddress;
+            _ProcessManager.SystemParam.Module1LightOnAddress = Module1LightOnAddress;
+            _ProcessManager.SystemParam.Module2LightOnAddress = Module2LightOnAddress;
+            _ProcessManager.SystemParam.Module3LightOnAddress = Module3LightOnAddress;
+            _ProcessManager.SystemParam.Module4LightOnAddress = Module4LightOnAddress;
+            _ProcessManager.SystemParam.Robot1MoveAddress = Robot1MoveAddress;
+            _ProcessManager.SystemParam.Robot2MoveAddress = Robot2MoveAddress;
+            _ProcessManager.SystemParam.Robot3MoveAddress = Robot3MoveAddress;
+            _ProcessManager.SystemParam.Robot4MoveAddress = Robot4MoveAddress;
+            _ProcessManager.SystemParam.DistanceAlarmAddress = DistanceAlarmAddress;
+
             _ProcessManager.SystemParam.LightCurtainPortName = SelectedComPort;
             _ProcessManager.SystemParam.LightCurtainBaudRate = SelectedBaudRate;
             _ProcessManager.SystemParam.LightCurtainHeightOffset = LightCurtainHeightOffset;
@@ -184,6 +376,29 @@ namespace PRND_InfraredCapture.ViewModels
         {
             PLCAddress = _ProcessManager.SystemParam.PLCAddress;
             PLCPort = _ProcessManager.SystemParam.PLCPort;
+            PLCStatusAddress = _ProcessManager.SystemParam.PLCStatusAddress;
+            TurnTableAngleAddress = _ProcessManager.SystemParam.TurnTableAngleAddress;
+            Light1StatusAddress = _ProcessManager.SystemParam.Light1StatusAddress;
+            Light2StatusAddress = _ProcessManager.SystemParam.Light2StatusAddress;
+            Light3StatusAddress = _ProcessManager.SystemParam.Light3StatusAddress;
+            Light4StatusAddress = _ProcessManager.SystemParam.Light4StatusAddress;
+            Robot1StatusAddress = _ProcessManager.SystemParam.Robot1StatusAddress;
+            Robot2StatusAddress = _ProcessManager.SystemParam.Robot2StatusAddress;
+            Robot3StatusAddress = _ProcessManager.SystemParam.Robot3StatusAddress;
+            Robot4StatusAddress = _ProcessManager.SystemParam.Robot4StatusAddress;
+
+            HeartBeatAddress = _ProcessManager.SystemParam.HeartBeatAddress;
+            PLCResponseAddress = _ProcessManager.SystemParam.PLCResponseAddress;
+            Module1LightOnAddress = _ProcessManager.SystemParam.Module1LightOnAddress;
+            Module2LightOnAddress = _ProcessManager.SystemParam.Module2LightOnAddress;
+            Module3LightOnAddress = _ProcessManager.SystemParam.Module3LightOnAddress;
+            Module4LightOnAddress = _ProcessManager.SystemParam.Module4LightOnAddress;
+            Robot1MoveAddress = _ProcessManager.SystemParam.Robot1MoveAddress;
+            Robot2MoveAddress = _ProcessManager.SystemParam.Robot2MoveAddress;
+            Robot3MoveAddress = _ProcessManager.SystemParam.Robot3MoveAddress;
+            Robot4MoveAddress = _ProcessManager.SystemParam.Robot4MoveAddress;
+            DistanceAlarmAddress = _ProcessManager.SystemParam.DistanceAlarmAddress;
+
             SelectedComPort = _ProcessManager.SystemParam.LightCurtainPortName;
             SelectedBaudRate = _ProcessManager.SystemParam.LightCurtainBaudRate;
             LightCurtainHeightOffset = _ProcessManager.SystemParam.LightCurtainHeightOffset ;
@@ -202,6 +417,7 @@ namespace PRND_InfraredCapture.ViewModels
         public override Task OnNavigatedFromAsync()
         {
             UpdateUI2Param();
+            DeChaningEvent();
             Logger.Instance.Print(Logger.LogLevel.INFO, "Escape SeetingView");
             return base.OnNavigatedFromAsync();
         }

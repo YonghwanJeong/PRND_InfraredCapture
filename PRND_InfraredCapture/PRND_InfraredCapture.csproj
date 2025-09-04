@@ -113,6 +113,7 @@
     <Compile Include="Models\LeuzeMdiClient.cs" />
     <Compile Include="Models\LightCurtainComm.cs" />
     <Compile Include="Models\NavigationMessage.cs" />
+    <Compile Include="Models\EdgeDetector.cs" />
     <Compile Include="Models\ProcessManager.cs" />
     <Compile Include="Models\SystemParameter.cs" />
     <Compile Include="Models\ThermalImageUtil.cs" />

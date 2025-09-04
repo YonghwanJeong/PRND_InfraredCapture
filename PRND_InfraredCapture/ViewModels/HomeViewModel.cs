@@ -35,7 +35,7 @@ namespace PRND_InfraredCapture.ViewModels
             set { SetProperty(ref _OnOfflineBtnText, value); }
         }
 
-        //public ICommand TestCommand { get; set; }
+        public ICommand InspectionStartCommand { get; set; }
         public ICommand ControlOnOffLineCommand { get; set; }
         public ICommand CaptureImageCommand { get; set; }
         public ICommand PageLoadedCommmand { get; set; }
@@ -56,19 +56,23 @@ namespace PRND_InfraredCapture.ViewModels
         {
             Title = "Home";
             OnOfflineBtnText = "Start Online";
-            ControlOnOffLineCommand = new RelayCommand(OnControlOnOfflineCommand);
-            CaptureImageCommand = new RelayCommand(OnCaptureImageCommand);
             PageLoadedCommmand = new RelayCommand(OnPageLoaded);
-            LightCurtainStartCommand = new RelayCommand(OnStartLightCurtain);
-            LightCurtainStopCommand = new RelayCommand(OnStopLightCurtain);
-            LaserStartCommand = new RelayCommand(OnLaserStartCommand);
-            LaserStopCommand = new RelayCommand(OnLaserStopCommand);
+            
+            ControlOnOffLineCommand = new RelayCommand(OnControlOnOfflineCommand);
+            InspectionStartCommand = new RelayCommand(OnInspectionStartCommand);
+            
             if (_IsFirstLoaded) Initialize();
             ChaningEvent();
 
             //Test();
 
         }
+
+        private void OnInspectionStartCommand()
+        {
+            _ProcessManager.StartInspectionSequence("Test");
+        }
+
         public void ChaningEvent()
         {
             Logger.Instance.OnLogSavedAction += OnLogSaved;
@@ -103,7 +107,7 @@ namespace PRND_InfraredCapture.ViewModels
                 OnOfflineBtnText = "Start Online";
                 Logger.Instance.Print(Logger.LogLevel.INFO, "Change to Offline Mode");
             }
-            
+
         }
         private void OnStartLightCurtain()
         {
@@ -128,7 +132,7 @@ namespace PRND_InfraredCapture.ViewModels
 
         private void OnCaptureImageCommand()
         {
-            _ProcessManager.StartCaptureImage();
+            _ProcessManager.StartCaptureImageAll();
         }
 
         private void OnUpdateGrabCount(int obj)

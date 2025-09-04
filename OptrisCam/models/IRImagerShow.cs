@@ -144,17 +144,23 @@ namespace CP.OptrisCam.models
                 }
             }
         }
-
-        public async void StartImageCapture(int frameCount, string savePath)
+        public void ReadyCapture(int focus)
         {
             if (!IsConnected)
                 return;
-            
+
+            Imager.runAsync();
+            //Imager.setFocusMotorPosition(focus);
+         //   await Task.Delay(1000);
+        }
+
+        public void StartImageCapture(int frameCount, string savePath)
+        {
+            if (!IsConnected)
+                return;
+
             _SaveFolderPath = savePath;
             _FrameCount = frameCount;
-            Imager.runAsync();
-            //Imager.setFocusMotorPosition(68);
-            await Task.Delay(1000);
             // reset state
             _burstDone.Reset();
             _FrameQueue = new ConcurrentQueue<CapturedFrame>();

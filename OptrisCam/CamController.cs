@@ -48,6 +48,14 @@ namespace CP.OptrisCam
             }
         }
 
+        public void ReadyCapture(ModuleIndex index, int focus)
+        {
+            if (_OptrisCams[(int)index].IsConnected)
+            {
+                _OptrisCams[(int)index].ReadyCapture(focus);
+                CamLogger.Instance.Print(CamLogger.LogLevel.INFO, $"{Enum.GetName(typeof(ModuleIndex), index)} Ready Capture");
+            }
+        }
         public void CaptureImage(ModuleIndex index, int framecnt, string savePath)
         {
             if (_OptrisCams[(int)index].IsConnected)

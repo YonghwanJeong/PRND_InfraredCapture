@@ -22,7 +22,8 @@
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
         <StackPanel>
-            
+            <Button Content="{Binding OnOfflineBtnText}" Command="{Binding ControlOnOffLineCommand}" />
+            <Button Content="Start Insepction" Command="{Binding InspectionStartCommand}"/> 
         </StackPanel>
         
         <GroupBox Grid.Row="2" Header="Program Log" Margin="10" >

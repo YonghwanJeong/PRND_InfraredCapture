@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -46,17 +47,42 @@ namespace PRND_InfraredCapture.Models
 
 
 
+        private bool _IsDebugMode = false;
+
+        //PLC
         private McProtocolTcp _MCProtocolTCP;
         private readonly SemaphoreSlim _mcProtocolLock = new SemaphoreSlim(1, 1);
-
-        private CancellationTokenSource _cts;
+        private CancellationTokenSource _PLCMonitoringCts;
+        private EdgeDetector _PLCCommandEdgeDetector = new EdgeDetector();
         private Task _PLCSignalMonitoringTask;
+        private Timer _HeartbeatTimer;
+        private bool _IsHeartBeatOn = false;
 
+        private CancellationTokenSource _MainLogicCts;
+        private Task _MainLogicTask;
+
+        public Action<bool> OnPLCDisconnected { get; set; }
+
+        //Device
         private CamController _CamController;
         private LightCurtainComm _LightCurtain;
         private LeuzeMdiClient[] _Lasers;
 
+        private bool _IsInspectionRunning = false;
 
+
+        //MainLogic 이벤트
+        public Action<int> OnSendCarHeight { get; set; }
+
+
+        //내부 사용 변수
+        private int _InfraredFrameCount = 80; 
+        private int _CurrentCarHeight = 0;
+        int _LastSentPCResponse = 0;
+        // 폴링/타임아웃 파라미터
+        private TimeSpan _poll = TimeSpan.FromMilliseconds(100);
+        private TimeSpan _ackTimeout = TimeSpan.FromSeconds(10);    // 검사 시작 수락 대기
+        private TimeSpan _doneTimeout = TimeSpan.FromSeconds(10);   // 로봇 이동 완료 대기 (설비에 맞게 조정)
 
         public ProcessManager()
         {
@@ -78,25 +104,312 @@ namespace PRND_InfraredCapture.Models
         {
             if (IsOnlineMode)
                 return;
-            
-            _CamController = new CamController(SystemParam.CamPathList);
-            _LightCurtain = new LightCurtainComm(SystemParam.LightCurtainPortName, SystemParam.LightCurtainBaudRate);
-            
-            _Lasers = new LeuzeMdiClient[SystemParam.LaserConnectionList.Count];
-            
-            for (int i = 0; i < SystemParam.LaserConnectionList.Count; i++)
+            try
             {
-                _Lasers[i] = new LeuzeMdiClient((ModuleIndex)i, SystemParam.LaserConnectionList[i].IPAddress, SystemParam.LaserConnectionList[i].Port);
-                _Lasers[i].FrameReceived += _Laser_FrameReceived;
-                await _Lasers[i].ConnectAsync();
-                await _Lasers[i].StartMonitoringAsync();
-            }
-            IsOnlineMode = true;
+                //LightCurtain 연결
+                _LightCurtain = new LightCurtainComm(SystemParam.LightCurtainPortName, SystemParam.LightCurtainBaudRate);
+                
+                //카메라 연결
+                _CamController = new CamController(SystemParam.CamPathList);
+                ConnectCam();
 
-            ConnectCam();
+                //레이저 거리센서 연결
+                _Lasers = new LeuzeMdiClient[SystemParam.LaserConnectionList.Count];
+                for (int i = 0; i < SystemParam.LaserConnectionList.Count; i++)
+                {
+                    _Lasers[i] = new LeuzeMdiClient((ModuleIndex)i, SystemParam.LaserConnectionList[i].IPAddress, SystemParam.LaserConnectionList[i].Port);
+                    _Lasers[i].FrameReceived += _Laser_FrameReceived;
+                    await _Lasers[i].ConnectAsync();
+                    await _Lasers[i].StartMonitoringAsync();
+                }
+
+                //PLC 연결
+                _HeartbeatTimer = new Timer(OnHeartBeat, null, 1000, 1000);
+                _MCProtocolTCP = new McProtocolTcp(SystemParam.PLCAddress, SystemParam.PLCPort, McFrame.MC3E);
+                await _MCProtocolTCP.Open();
+                if (!_MCProtocolTCP.Connected)
+                {
+                    Logger.Instance.Print(Logger.LogLevel.INFO, "PLC 연결에 실패하였습니다.", true);
+                    return;
+                }
+                Logger.Instance.Print(Logger.LogLevel.INFO, "PLC 연결성공.", true);
+                OnPLCDisconnected?.Invoke(true);
+                _PLCMonitoringCts = new CancellationTokenSource();
+                _PLCSignalMonitoringTask = Task.Run(() => PLCSignalMonitoringAsync(_PLCMonitoringCts.Token));
+
+
+                IsOnlineMode = true;
+            }
+            catch (Exception ex)
+            {
+                Logger.Instance.Print(Logger.LogLevel.INFO, $"예상치 못한 오류: {ex.Message}", true);
+
+            }
+
+            
+
 
             Logger.Instance.Print(Logger.LogLevel.INFO, $"Online 모드 시작", true);
         }
+
+
+        public async void StopOnline()
+        {
+            if (!IsOnlineMode)
+                return;
+
+            //LightCurtain Stop
+            _LightCurtain.Stop();
+
+            //카메라 Disconnect
+            _CamController.DisconnectAll();
+
+            //레이저 거리센서 Disconnect
+            for (int i = 0; i < _Lasers.Length; i++)
+            {
+                if (!_Lasers[i].IsConnected)
+                    return;
+                await _Lasers[i].DisconnectAsync();
+                _Lasers[i].FrameReceived -= _Laser_FrameReceived;
+            }
+
+            //PLC Disconnect
+            _HeartbeatTimer.Change(Timeout.Infinite, Timeout.Infinite);
+            _HeartbeatTimer.Dispose();
+            if(_PLCSignalMonitoringTask!=null)
+                await StopPLCMonitoringTaskAsync();
+            if(_MainLogicTask != null)
+                await StopMainLogicTaskAsync();
+
+            _MCProtocolTCP.Close();
+            OnPLCDisconnected?.Invoke(false);
+
+            IsOnlineMode = false;
+
+            Logger.Instance.Print(Logger.LogLevel.INFO, $"Online 모드 정지", true);
+        }
+        private async Task StopMainLogicTaskAsync()
+        {
+            _MainLogicCts?.Cancel();
+            try
+            {
+                await _MainLogicTask;
+            }
+            catch (OperationCanceledException)
+            {
+                Logger.Instance.Print(Logger.LogLevel.INFO, "메인 로직 정지", true);
+            }
+            finally
+            {
+                _PLCMonitoringCts.Dispose();
+                _IsInspectionRunning = false;
+            }
+        }
+        private async Task StopPLCMonitoringTaskAsync()
+        {
+            _PLCMonitoringCts.Cancel();
+            try
+            {
+                await _PLCSignalMonitoringTask;
+            }
+            catch (OperationCanceledException)
+            {
+                Logger.Instance.Print(Logger.LogLevel.INFO, "PLC 모니터링 정지", true);
+            }
+            finally
+            {
+                _PLCMonitoringCts.Dispose();
+            }
+        }
+
+        public void StartInspectionSequence(string carNumber)
+        {
+            if (!IsOnlineMode)
+            {
+                Logger.Instance.Print(Logger.LogLevel.INFO, "Online 모드가 아닙니다.", true);
+                return;
+            }
+            if (_IsInspectionRunning)
+            {
+                Logger.Instance.Print(Logger.LogLevel.INFO, "이미 Sequence가 시작 중입니다.", true);
+                return;
+            }
+
+            _MainLogicCts = new CancellationTokenSource();
+            _MainLogicTask = Task.Run(() => RunningMainLogicTask(carNumber, _MainLogicCts.Token));
+        }
+
+
+        private async void PLCSignalMonitoringAsync(CancellationToken token)
+        {
+            while (!token.IsCancellationRequested)
+            {
+                try
+                {
+                    await SafeGetDevice(PlcDeviceType.D, SystemParam.PLCStatusAddress);
+                    int value = _MCProtocolTCP.Device;
+
+                    _PLCCommandEdgeDetector.Update(value);
+                    if(_PLCCommandEdgeDetector.IsRisingEdge(BitIndex.Bit0)) //차량 진입 신호
+                    {
+                        Logger.Instance.Print(Logger.LogLevel.INFO, "차량 진입 신호 감지", true);
+                        
+                        SetPCResponseBit(BitIndex.Bit15, true); //응답 완료 신호 on
+                        bool checkAck = await WaitForWordBitAsync(PlcDeviceType.D, SystemParam.PLCStatusAddress, 0, true, _ackTimeout, _poll, token, "").ConfigureAwait(false);
+                        if (!checkAck)
+                            Logger.Instance.Print(Logger.LogLevel.INFO, $"PLC 응답 없음", true);
+                        else
+                            SetPCResponseBit(BitIndex.Bit15, false); //응답 완료 신호 off
+
+                        _LightCurtain.Start(SystemParam.LightCurtainHeightOffset);
+
+                    }
+                    else if(_PLCCommandEdgeDetector.IsRisingEdge(BitIndex.Bit15))
+                    {
+                        //**검사 초기화 시퀀스 추가해야 함.
+                    }
+                    else
+                    {
+                        await Task.Delay(100, token);
+                    }
+
+                }
+                catch (TaskCanceledException)
+                {
+                    Logger.Instance.Print(Logger.LogLevel.INFO, "PLC 모니터링 로직이 종료되었습니다.", true);
+                }
+            }
+        }
+
+
+
+
+        private async void RunningMainLogicTask(string carNumber,CancellationToken token)
+        {
+
+            try
+            {
+                int robotMovingDelay = 250; //로봇 이동 딜레이 타임
+                if (_IsInspectionRunning)
+                {
+                    Logger.Instance.Print(Logger.LogLevel.INFO, "이미 Sequence가 시작 중입니다.", true);
+                    return;
+                }
+                _IsInspectionRunning = true;
+
+
+                Logger.Instance.Print(Logger.LogLevel.INFO, $"{carNumber} 차량 검사 시퀀스 시작", true);
+
+
+                var stopwatch = Stopwatch.StartNew();
+                // Your code here
+
+
+                SetPCResponseBit(BitIndex.Bit0, true); //검사 시작 On
+                // 2) PLC -> PC : 특정 워드의 특정 비트가 ON 될 때까지 폴링
+                bool ResponseAck = await WaitForWordBitAsync(PlcDeviceType.D, SystemParam.PLCStatusAddress, 15, true, _ackTimeout, _poll, token, "START_ACK").ConfigureAwait(false);
+                if (!ResponseAck)
+                    Logger.Instance.Print(Logger.LogLevel.INFO, $"{carNumber} PLC 응답 없음", true);
+                else
+                    SetPCResponseBit(BitIndex.Bit0, false); //검사 시작 Off
+
+
+                //차량 높이 정보 업데이트
+                _CurrentCarHeight = _LightCurtain.Stop();
+                OnSendCarHeight?.Invoke(_CurrentCarHeight);
+
+
+                //Step1
+                var step1RobotMovveTasks = new List<Task>();
+                //로봇 1 동작
+                step1RobotMovveTasks.Add(Task.Run(async () =>
+                {
+                    await MoveRobot(ModuleIndex.Module1, 0).ConfigureAwait(false);
+                    Logger.Instance.Print(Logger.LogLevel.INFO, $"거리센서 측정", true);
+                    double distance = GetDistancebyLaser(ModuleIndex.Module1);
+                    //Robot 1Move 신호
+                    StartCaptureImage(ModuleIndex.Module1, 100, _InfraredFrameCount);
+                    
+                    await MoveRobot(ModuleIndex.Module1, 1).ConfigureAwait(false);
+                    StartCaptureImage(ModuleIndex.Module1, 100, _InfraredFrameCount);
+
+                }, token));
+                Logger.Instance.Print(Logger.LogLevel.INFO, $"로봇1 이동 시작", true);
+                await Task.Delay(robotMovingDelay).ConfigureAwait(false);
+                //로봇 2 이동
+                step1RobotMovveTasks.Add(Task.Run(async () =>
+                {
+                    await MoveRobot(ModuleIndex.Module2, 0).ConfigureAwait(false);
+                }, token));
+                Logger.Instance.Print(Logger.LogLevel.INFO, $"로봇2 이동 시작", true);
+                //await Task.Delay(robotMovingDelay).ConfigureAwait(false);
+                ////로봇 3 이동
+                //step1RobotMovveTasks.Add(Task.Run(async () =>
+                //{
+                //    await MoveRobot(ModuleIndex.Module3, 0).ConfigureAwait(false);
+                //}, token));
+                //Logger.Instance.Print(Logger.LogLevel.INFO, $"로봇3 이동 시작", true);
+                //await Task.Delay(robotMovingDelay).ConfigureAwait(false);
+                ////로봇 4 이동
+                //step1RobotMovveTasks.Add(Task.Run(async () =>
+                //{
+                //    await MoveRobot(ModuleIndex.Module4, 0).ConfigureAwait(false);
+                //}, token));
+                //Logger.Instance.Print(Logger.LogLevel.INFO, $"로봇4 이동 시작", true);
+
+                await Task.WhenAll(step1RobotMovveTasks).ConfigureAwait(false);
+                Logger.Instance.Print(Logger.LogLevel.INFO, $"로봇 이동 완료", true);
+
+
+                //거리 센서 측정
+                for (int i=0; i<_Lasers.Length; i++)
+                {
+                    
+                    
+                }
+
+
+
+                Logger.Instance.Print(Logger.LogLevel.INFO, $"{carNumber} 차량 검사 시퀀스 종료", true);
+                _IsInspectionRunning = false;
+
+            }
+            catch (TaskCanceledException)
+            {
+                Logger.Instance.Print(Logger.LogLevel.INFO, "MainLoginc 오류로 중단 되었습니다.", true);
+            }
+  
+        }
+
+        private async void SetPCResponseBit(BitIndex index, bool isOn)
+        {
+            _LastSentPCResponse = SetDevieBit(_LastSentPCResponse, index, isOn);
+            await SafeSetDevice(PlcDeviceType.D, SystemParam.PLCResponseAddress, _LastSentPCResponse);
+        }
+        private async void OnHeartBeat(object state)
+        {
+            if (!IsOnlineMode)
+                return;
+
+            if (!_MCProtocolTCP.Connected)
+            {
+                OnPLCDisconnected?.Invoke(false);
+                return;
+            }
+
+            if (_IsHeartBeatOn)
+            {
+
+                await SafeSetDevice(PlcDeviceType.D, SystemParam.PLCResponseAddress, 1);
+                _IsHeartBeatOn = false;
+            }
+            else
+            {
+                await SafeSetDevice(PlcDeviceType.D, SystemParam.PLCResponseAddress, 0);
+                _IsHeartBeatOn = true;
+            }
+        }
+
 
         private void _Laser_FrameReceived(ModuleIndex index, Header hdr, ushort[] dist, ushort[] inten)
         {
@@ -117,23 +430,6 @@ namespace PRND_InfraredCapture.Models
             //Console.WriteLine();
         }
 
-        public async void StopOnline()
-        {
-            if (!IsOnlineMode)
-                return;
-            
-            _CamController.DisconnectAll();
-            for (int i = 0; i < _Lasers.Length; i++)
-            {
-                if (!_Lasers[i].IsConnected)
-                    return;
-                await _Lasers[i].DisconnectAsync();
-                _Lasers[i].FrameReceived -= _Laser_FrameReceived;
-            }
-
-            IsOnlineMode = false;
-            Logger.Instance.Print(Logger.LogLevel.INFO, $"Online 모드 정지", true);
-        }
         public void StartLightCurtain()
         {
             _LightCurtain.Start(SystemParam.LightCurtainHeightOffset);
@@ -145,10 +441,10 @@ namespace PRND_InfraredCapture.Models
             Logger.Instance.Print(Logger.LogLevel.INFO, $"최대 높이: {maxHeight} mm", true);
         }
 
-        public void GetDistancebyLaser(ModuleIndex index)
+        public double GetDistancebyLaser(ModuleIndex index)
         {
             if (!IsOnlineMode)
-                return;
+                return -1;
 
             // 원하는 시점에 캡처
             var res = _Lasers[(int)index].CaptureMinAvgAsync(frames: 10, window: 5,
@@ -156,7 +452,8 @@ namespace PRND_InfraredCapture.Models
                                                 ignoreZero: false)
                             .GetAwaiter().GetResult();
 
-            MessageBox.Show($"Min Avg Distance: {res.AvgDistanceMm} mm at Angle: {res.AngleDeg}° over {res.FramesConsidered} frames starting from index {res.StartIndex}");
+            Logger.Instance.Print(Logger.LogLevel.INFO, $"{Enum.GetName(typeof(ModuleIndex), (ModuleIndex)index)} Min Avg Distance: {res.AvgDistanceMm} mm at Angle: {res.AngleDeg}° over {res.FramesConsidered} frames starting from index {res.StartIndex}", true);
+            return res.AvgDistanceMm;
 
         }
         public void StopAllLaserScan()
@@ -167,8 +464,6 @@ namespace PRND_InfraredCapture.Models
 
         public void ConnectCam()
         {
-            if (!IsOnlineMode)
-                return;
             try
             {
                 for (int i = 0; i < SystemParam.CamPathList.Count; i++)
@@ -177,8 +472,6 @@ namespace PRND_InfraredCapture.Models
                         Logger.Instance.Print(Logger.LogLevel.ERROR, $"Cam{i + 1} 경로가 설정되지 않았습니다.", true);
 
                     _CamController.Connect((ModuleIndex)i);
-
-                    
                 }
             }
             catch(Exception ex)
@@ -193,18 +486,307 @@ namespace PRND_InfraredCapture.Models
             _CamController.DisconnectAll();
 
         }
-        public void StartCaptureImage()
+
+        public async Task MoveRobot(ModuleIndex moduleIndex, int positionIndex)
         {
+            var robotStatusMap = new Dictionary<ModuleIndex, int>
+            {
+                { ModuleIndex.Module1, SystemParam.Robot1StatusAddress },
+                { ModuleIndex.Module2, SystemParam.Robot2StatusAddress},
+                { ModuleIndex.Module3, SystemParam.Robot3StatusAddress},
+                { ModuleIndex.Module4, SystemParam.Robot4StatusAddress}
+            };
+            var robotMap = new Dictionary<ModuleIndex, int>
+            {
+                { ModuleIndex.Module1, SystemParam.Robot1MoveAddress },
+                { ModuleIndex.Module2, SystemParam.Robot2MoveAddress },
+                { ModuleIndex.Module3, SystemParam.Robot3MoveAddress },
+                { ModuleIndex.Module4, SystemParam.Robot4MoveAddress }
+            };
+            int robotStatus = robotStatusMap[moduleIndex];
+            int moveAddress = robotMap[moduleIndex];
+            
             try
             {
-                for (int i = 0; i < SystemParam.CamPathList.Count; i++)
-                    _CamController?.CaptureImage((ModuleIndex)i, 240, SystemParam.ImageDataSavePath);
+                if (!IsOnlineMode)
+                    return;
+                if (!_MCProtocolTCP.Connected)
+                    return;
+
+
+                // 로봇 레디 상태 확인
+                CancellationToken token = new CancellationToken();
+                bool robotReadyAck = await WaitForWordBitAsync(PlcDeviceType.D, robotStatus, 10, true, _ackTimeout, _poll, token, "robotReadyAck").ConfigureAwait(false);
+                if (!robotReadyAck)
+                    Logger.Instance.Print(Logger.LogLevel.INFO, $"{Enum.GetName(typeof(ModuleIndex), moduleIndex)} 로봇 상태를 확인하세요", true);
+
+
+                var position = SetDevieBit(0, (BitIndex)positionIndex, true);
+                await SafeSetDevice(PlcDeviceType.D, moveAddress, position);
+                // 2) PLC -> PC : 특정 워드의 특정 비트가 ON 될 때까지 폴링
+                bool robotStartAck = await WaitForWordBitAsync(PlcDeviceType.D, SystemParam.PLCStatusAddress, 15, true, _ackTimeout, _poll, token, "robotStartAck").ConfigureAwait(false); //응답 대기
+                if (!robotStartAck)
+                    Logger.Instance.Print(Logger.LogLevel.WARN, $"{Enum.GetName(typeof(ModuleIndex), moduleIndex)} 로봇 이동 요청세 PLC 응답 없음", true);
+                else
+                    await SafeSetDevice(PlcDeviceType.D, moveAddress, 0);
+
+
+                bool moveDone = await WaitForWordBitAsync(PlcDeviceType.D, robotStatus, 2, true, _doneTimeout, _poll, token, "MOVE_DONE").ConfigureAwait(false); //이동 완료 대기
+                if (!moveDone)
+                    Logger.Instance.Print(Logger.LogLevel.WARN, $"{Enum.GetName(typeof(ModuleIndex), moduleIndex)} 로봇 이동 완료 PLC 응답 없음", true);
+            }
+            catch (OperationCanceledException)
+            {
+                // 취소 시 로깅만
+                Logger.Instance.Print(Logger.LogLevel.INFO,
+                    $"{Enum.GetName(typeof(ModuleIndex), moduleIndex)} 이동 작업 취소", true);
+            }
+            catch (Exception ex)
+            {
+                Logger.Instance.Print(Logger.LogLevel.ERROR, $"{Enum.GetName(typeof(ModuleIndex), moduleIndex)} 로봇 이동 중 오류 발생: {ex.Message}", true);
+            }
+        }
+
+        public async void StartCaptureImage(ModuleIndex index, int focus, int framecnt)
+        {
+
+            var statusMap = new Dictionary<ModuleIndex, int>
+            {
+                { ModuleIndex.Module1, SystemParam.Light1StatusAddress },
+                { ModuleIndex.Module2, SystemParam.Light2StatusAddress },
+                { ModuleIndex.Module3, SystemParam.Light3StatusAddress },
+                { ModuleIndex.Module4, SystemParam.Light4StatusAddress }
+            };
+
+            var triggerMap = new Dictionary<ModuleIndex, int>
+            {
+                { ModuleIndex.Module1, SystemParam.Module1LightOnAddress },
+                { ModuleIndex.Module2, SystemParam.Module2LightOnAddress },
+                { ModuleIndex.Module3, SystemParam.Module3LightOnAddress },
+                { ModuleIndex.Module4, SystemParam.Module4LightOnAddress }
+            };
+
+            int statusAddress = statusMap[index];
+            int triggerAddress = triggerMap[index];
+
+            try
+            {
+                if (_CamController != null)
+                {
+                    CheckLightStatus(index, statusAddress);
+                    _CamController.ReadyCapture(index, focus);
+                    await Task.Delay(1000);
+                    _CamController.CaptureImage(index, framecnt, SystemParam.ImageDataSavePath);
+                    TurnOnLight(index, triggerAddress);
+                }
             }
             catch (Exception ex)
             {
                 Logger.Instance.Print(Logger.LogLevel.ERROR, $"카메라 취득 중 오류 발생: {ex.Message}", true);
                 return;
             }
+        }
+
+
+        private async void CheckLightStatus(ModuleIndex index, int statusAddress)
+        {
+            if (!IsOnlineMode)
+                return;
+            if (!_MCProtocolTCP.Connected)
+                return;
+
+            try
+            {
+                CancellationToken token = new CancellationToken();
+                bool lightAck = await WaitForWordBitsAsync(PlcDeviceType.D, statusAddress, new[] { 0, 1 }, true, _ackTimeout, _poll, token, "lightAck ").ConfigureAwait(false);
+                if (!lightAck)
+                    Logger.Instance.Print(Logger.LogLevel.INFO, $"{Enum.GetName(typeof(ModuleIndex), index)} 조명 상태를 확인하세요", true);
+            }
+            catch (Exception ex)
+            {
+                Logger.Instance.Print(Logger.LogLevel.ERROR, $"{Enum.GetName(typeof(ModuleIndex), index)} 조명 On 오류 발생: {ex.Message}", true);
+            }
+
+        }
+        private async void TurnOnLight(ModuleIndex index, int triggerAddress)
+        {
+            if (!IsOnlineMode)
+                return;
+            if (!_MCProtocolTCP.Connected)
+                return;
+
+            try
+            {
+                CancellationToken token = new CancellationToken();
+                await SafeSetDevice(PlcDeviceType.D, triggerAddress, 1);
+                // 2) PLC -> PC : 특정 워드의 특정 비트가 ON 될 때까지 폴링
+                bool startAck = await WaitForWordBitAsync(PlcDeviceType.D, SystemParam.PLCStatusAddress, 15, true, _ackTimeout, _poll, token, "START_ACK").ConfigureAwait(false); //응답 대기
+                if (!startAck)
+                    Logger.Instance.Print(Logger.LogLevel.WARN, $"{Enum.GetName(typeof(ModuleIndex), index)} 조명 On 요청세 PLC 응답 없음", true);
+                else
+                    await SafeSetDevice(PlcDeviceType.D, triggerAddress, 0);
+            }
+            catch(Exception ex)
+            {
+                Logger.Instance.Print(Logger.LogLevel.ERROR, $"{Enum.GetName(typeof(ModuleIndex),index)} 조명 On 오류 발생: {ex.Message}", true);
+            }
+        }
+
+        public void StartCaptureImageAll()
+        {
+            try
+            {
+                for (int i = 0; i < SystemParam.CamPathList.Count; i++)
+                    StartCaptureImage((ModuleIndex)i, 100, 80);
+            }
+            catch (Exception ex)
+            {
+                Logger.Instance.Print(Logger.LogLevel.ERROR, $"카메라 취득 중 오류 발생: {ex.Message}", true);
+                return;
+            }
+        }
+
+        public int SetDevieBit(int currentValue, BitIndex index, bool isOn)
+        {
+            // 비트 위치 계산: VisionReady → bit 7, Response → bit 3
+            int bitIndex = (int)index;
+
+            if (isOn)
+            {
+                currentValue |= (1 << bitIndex);         // 해당 비트를 1로 설정
+            }
+            else
+            {
+                currentValue &= ~(1 << bitIndex);        // 해당 비트를 0으로 설정
+            }
+
+            return currentValue;
+        }
+        private async Task<int> SafeSetDevice(PlcDeviceType type, int address, int value)
+        {
+            await _mcProtocolLock.WaitAsync();
+            try
+            {
+                return await _MCProtocolTCP.SetDevice(type, address, value);
+            }
+            catch (Exception ex)
+            {
+                Logger.Instance.Print(Logger.LogLevel.ERROR, $"Unexpected Exception in SafeGetDevice: {ex.Message}");
+                return -1;
+            }
+            finally
+            {
+                _mcProtocolLock.Release();
+            }
+        }
+        private async Task<int> SafeGetDevice(PlcDeviceType type, int address)
+        {
+            await _mcProtocolLock.WaitAsync();
+            try
+            {
+                return await _MCProtocolTCP.GetDevice(type, address);
+            }
+            catch (Exception ex)
+            {
+                Logger.Instance.Print(Logger.LogLevel.ERROR, $"Unexpected Exception in SafeGetDevice: {ex.Message}");
+                return -1;
+            }
+            finally
+            {
+                _mcProtocolLock.Release();
+            }
+        }
+        private async Task<int> SafeWriteDeviceBlock(PlcDeviceType type, int address, int count, int[] data)
+        {
+            await _mcProtocolLock.WaitAsync();
+            try
+            {
+                return await _MCProtocolTCP.WriteDeviceBlock(type, address, count, data);
+            }
+            catch (Exception ex)
+            {
+                Logger.Instance.Print(Logger.LogLevel.ERROR, $"Unexpected Exception in SafeGetDevice: {ex.Message}");
+                return -1;
+            }
+            finally
+            {
+                _mcProtocolLock.Release();
+            }
+        }
+        private async Task<byte[]> SafeReadDeviceBlock(PlcDeviceType type, int address, int count)
+        {
+            await _mcProtocolLock.WaitAsync();
+            try
+            {
+                return await _MCProtocolTCP.ReadDeviceBlock(type, address, count);
+
+            }
+            finally
+            {
+                _mcProtocolLock.Release();
+            }
+        }
+        private async Task<bool> WaitForWordBitAsync(PlcDeviceType wordType, int wordAddr, int bitIndex, bool expectOn, TimeSpan timeout, TimeSpan pollInterval, CancellationToken ct, string logTag)
+        {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            while (sw.Elapsed < timeout)
+            {
+                ct.ThrowIfCancellationRequested();
+
+                await SafeGetDevice(wordType, wordAddr).ConfigureAwait(false);
+                int val = _MCProtocolTCP.Device;
+                bool on = IsBitOn(val, bitIndex);
+
+                if (on == expectOn)
+                    return true;
+
+                await Task.Delay(pollInterval, ct).ConfigureAwait(false);
+            }
+
+            Logger.Instance.Print(Logger.LogLevel.ERROR,
+                $"{logTag}: D{wordAddr}.{bitIndex} 기대 상태({(expectOn ? "ON" : "OFF")}) 타임아웃",
+                true);
+            return false;
+        }
+        public async Task<bool> WaitForWordBitsAsync(PlcDeviceType wordType, int wordAddr, IReadOnlyList<int> bitIndices, bool expectOnAll, TimeSpan timeout, TimeSpan pollInterval, CancellationToken ct, string logTag)
+        {
+            if (bitIndices == null || bitIndices.Count == 0)
+                throw new ArgumentException("bitIndices must have at least one bit.");
+
+            // 선택한 비트들의 마스크
+            int mask = 0;
+            for (int i = 0; i < bitIndices.Count; i++)
+                mask |= (1 << bitIndices[i]);
+
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            while (sw.Elapsed < timeout)
+            {
+                ct.ThrowIfCancellationRequested();
+
+                await SafeGetDevice(wordType, wordAddr).ConfigureAwait(false);
+                int val = _MCProtocolTCP.Device;
+
+                bool ok = expectOnAll
+                    ? ((val & mask) == mask)  // 모든 비트가 ON
+                    : ((val & mask) == 0);    // 모든 비트가 OFF
+
+                if (ok) return true;
+
+                await Task.Delay(pollInterval, ct).ConfigureAwait(false);
+            }
+
+            Logger.Instance.Print(Logger.LogLevel.ERROR,
+                $"{logTag}: D{wordAddr} 비트 {string.Join(",", bitIndices)} 기대 상태({(expectOnAll ? "ALL ON" : "ALL OFF")}) 타임아웃",
+                true);
+            return false;
+        }
+
+        // 워드 안 특정 비트(on/off) 검사
+        private static bool IsBitOn(int wordValue, int bitIndex)
+        {
+            // bitIndex: 0~15 (Q시리즈 D는 1워드=16비트)
+            int mask = 1 << bitIndex;
+            return (wordValue & mask) != 0;
         }
     }
 }

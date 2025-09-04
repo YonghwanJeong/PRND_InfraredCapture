@@ -179,7 +179,7 @@ namespace PRND_InfraredCapture.ViewModels
 
         private void OnCaptureImageCommand()
         {
-            _ProcessManager.StartCaptureImage();
+            _ProcessManager.StartCaptureImageAll();
         }
 
         private void OnUpdateGrabCount(int obj)
