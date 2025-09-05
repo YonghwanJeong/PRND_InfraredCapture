@@ -255,7 +255,7 @@ namespace PRND_InfraredCapture.Models
                         Logger.Instance.Print(Logger.LogLevel.INFO, "차량 진입 신호 감지", true);
                         
                         SetPCResponseBit(BitIndex.Bit15, true); //응답 완료 신호 on
-                        bool checkAck = await WaitForWordBitAsync(PlcDeviceType.D, SystemParam.PLCStatusAddress, 0, true, _ackTimeout, _poll, token, "").ConfigureAwait(false);
+                        bool checkAck = await WaitForWordBitAsync(PlcDeviceType.D, SystemParam.PLCStatusAddress, 15, true, _ackTimeout, _poll, token, "").ConfigureAwait(false);
                         if (!checkAck)
                             Logger.Instance.Print(Logger.LogLevel.INFO, $"PLC 응답 없음", true);
                         else
