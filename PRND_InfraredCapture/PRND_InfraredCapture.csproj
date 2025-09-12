@@ -115,6 +115,8 @@
     <Compile Include="Models\NavigationMessage.cs" />
     <Compile Include="Models\EdgeDetector.cs" />
     <Compile Include="Models\ProcessManager.cs" />
+    <Compile Include="Models\RobotServer.cs" />
+    <Compile Include="Models\RobotSession.cs" />
     <Compile Include="Models\SystemParameter.cs" />
     <Compile Include="Models\ThermalImageUtil.cs" />
     <Compile Include="ViewModels\HomeViewModel.cs" />

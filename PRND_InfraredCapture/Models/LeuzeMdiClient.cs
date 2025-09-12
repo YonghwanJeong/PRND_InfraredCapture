@@ -43,6 +43,7 @@ namespace PRND_InfraredCapture.Models
 
         // ===== Public =====
         public event Action<ModuleIndex, Header, ushort[], ushort[]> FrameReceived; // (Header, Dist[], Intensity[])
+        public event Action<ModuleIndex, bool> WarningStateChanged; // (ModuleIndex, IsWarning)
         public bool IsConnected => _client != null && _client.Connected;
 
         public LeuzeMdiClient(ModuleIndex index, string host, int port, TimeSpan? reconnectBackoff = null)
@@ -83,7 +84,7 @@ namespace PRND_InfraredCapture.Models
             Stop();
             await WaitUntilStoppedAsync().ConfigureAwait(false);
             DisposeStreamsOnly();
-            Logger.Instance.Print(Logger.LogLevel.INFO, $"{Enum.GetName(typeof(ModuleIndex), _ModuleIndex)} Disconnected", true);
+            Logger.Instance.Print(Logger.LogLevel.INFO, $"{Enum.GetName(typeof(ModuleIndex), _ModuleIndex)} Laser sensor Disconnected", true);
         }
 
         /// <summary>모니터링 루프가 끝날 때까지 대기(선택)</summary>
@@ -306,11 +307,11 @@ namespace PRND_InfraredCapture.Models
                 _client = new TcpClient { NoDelay = true };
                 await _client.ConnectAsync(_host, _port).ConfigureAwait(false);
                 _stream = _client.GetStream();
-                Logger.Instance.Print(Logger.LogLevel.INFO, $"{Enum.GetName(typeof(ModuleIndex), _ModuleIndex)} Connected", true);
+                Logger.Instance.Print(Logger.LogLevel.INFO, $"{Enum.GetName(typeof(ModuleIndex), _ModuleIndex)} Laser sensor Connected", true);
             }
             catch(Exception ex)
             {
-                Logger.Instance.Print(Logger.LogLevel.ERROR, $"{Enum.GetName(typeof(ModuleIndex), _ModuleIndex)} Connect fail: {ex.Message}", true);
+                Logger.Instance.Print(Logger.LogLevel.ERROR, $"{Enum.GetName(typeof(ModuleIndex), _ModuleIndex)} Laser sensor Connect fail: {ex.Message}", true);
                 DisposeStreamsOnly();
             }
         }
@@ -318,7 +319,7 @@ namespace PRND_InfraredCapture.Models
         private Task SendStartCommandAsync()
         {
             if (_stream == null) throw new InvalidOperationException("Not connected.");
-            Logger.Instance.Print(Logger.LogLevel.INFO, $"{Enum.GetName(typeof(ModuleIndex), _ModuleIndex)} SendMDI command.", true);
+            Logger.Instance.Print(Logger.LogLevel.INFO, $"{Enum.GetName(typeof(ModuleIndex), _ModuleIndex)} Laser sensor  SendMDI command.", true);
             // .NET Fx 4.7에는 CancellationToken 버전 오버로드가 없으므로 기본 오버로드 사용
             return _stream.WriteAsync(CMD_SEND_MDI, 0, CMD_SEND_MDI.Length);
         }
@@ -360,8 +361,8 @@ namespace PRND_InfraredCapture.Models
                                         {
                                             _warnActive = true;
                                             _clearStreak = 0;
-                                            Logger.Instance.Print(
-                                                Logger.LogLevel.INFO,
+                                            WarningStateChanged?.Invoke(_ModuleIndex, true);
+                                            Logger.Instance.Print(Logger.LogLevel.INFO,
                                                 $"{Enum.GetName(typeof(ModuleIndex), _ModuleIndex)} 경고: 너무 가깝습니다 " +
                                                 $"(최근 {FRAME_WINDOW}프레임 중 {below}프레임 < {DIST_THRESH}mm, 현재={frameMinAvg:F1}mm)",
                                                 true);
@@ -375,6 +376,7 @@ namespace PRND_InfraredCapture.Models
                                                 {
                                                     _warnActive = false;
                                                     _clearStreak = 0;
+                                                    WarningStateChanged?.Invoke(_ModuleIndex, false);
                                                     Logger.Instance.Print(
                                                         Logger.LogLevel.INFO,
                                                         $"{Enum.GetName(typeof(ModuleIndex), _ModuleIndex)} 경고 해제 " +
@@ -394,12 +396,12 @@ namespace PRND_InfraredCapture.Models
                             }
                                 
                             else
-                                Logger.Instance.Print(Logger.LogLevel.WARN, $"{Enum.GetName(typeof(ModuleIndex), _ModuleIndex)} Parse fail {err}", true);
+                                Logger.Instance.Print(Logger.LogLevel.WARN, $"{Enum.GetName(typeof(ModuleIndex), _ModuleIndex)} Laser sensor Parse fail {err}", true);
                         });
                     }
                     catch (ObjectDisposedException) { /* 소켓 종료 시 */ }
                     catch (IOException) { /* 원격 종료 또는 Stop()로 close됨 */ }
-                    catch (Exception ex) { Logger.Instance.Print(Logger.LogLevel.WARN, $"{Enum.GetName(typeof(ModuleIndex), _ModuleIndex)} receive loop: {ex.Message}", true); }
+                    catch (Exception ex) { Logger.Instance.Print(Logger.LogLevel.WARN, $"{Enum.GetName(typeof(ModuleIndex), _ModuleIndex)} Laser sensor receive loop: {ex.Message}", true); }
                 }
             }
         }

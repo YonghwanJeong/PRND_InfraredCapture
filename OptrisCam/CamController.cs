@@ -48,7 +48,7 @@ namespace CP.OptrisCam
             }
         }
 
-        public void ReadyCapture(ModuleIndex index, int focus)
+        public void ReadyCapture(ModuleIndex index, float focus)
         {
             if (_OptrisCams[(int)index].IsConnected)
             {
@@ -56,10 +56,10 @@ namespace CP.OptrisCam
                 CamLogger.Instance.Print(CamLogger.LogLevel.INFO, $"{Enum.GetName(typeof(ModuleIndex), index)} Ready Capture");
             }
         }
-        public void CaptureImage(ModuleIndex index, int framecnt, string savePath)
+        public void CaptureImage(ModuleIndex index, int framecnt, string savePath,  AcquisitionAngle angle, string positionName = "")
         {
             if (_OptrisCams[(int)index].IsConnected)
-                _OptrisCams[(int)index].StartImageCapture(framecnt, savePath);
+                _OptrisCams[(int)index].StartImageCapture(framecnt, savePath, angle, positionName);
         }
         public void Disconnect(ModuleIndex camIndex)
         {

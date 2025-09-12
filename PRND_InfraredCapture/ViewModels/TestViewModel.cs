@@ -1,5 +1,6 @@
 ﻿using CommunityToolkit.Mvvm.Input;
 using CP.Common;
+using CP.OptrisCam;
 using PRND_InfraredCapture.Bases;
 using PRND_InfraredCapture.Models;
 using System;
@@ -57,6 +58,7 @@ namespace PRND_InfraredCapture.ViewModels
         //public ICommand TestCommand { get; set; }
         public ICommand ControlOnOffLineCommand { get; set; }
         public ICommand CaptureImageCommand { get; set; }
+        public ICommand GetLaserDistanceCommand { get; set; }
         public ICommand PageLoadedCommmand { get; set; }
         public ICommand LightCurtainStartCommand { get; set; }
         public ICommand LightCurtainStopCommand { get; set; }
@@ -76,7 +78,8 @@ namespace PRND_InfraredCapture.ViewModels
             Title = "Home";
             OnOfflineBtnText = "Start Online";
             ControlOnOffLineCommand = new RelayCommand(OnControlOnOfflineCommand);
-            CaptureImageCommand = new RelayCommand(OnCaptureImageCommand);
+            CaptureImageCommand = new RelayCommand<object>(OnCaptureImageCommand);
+            GetLaserDistanceCommand = new RelayCommand<object>(OnGetLaserDistanceCommand);
             PageLoadedCommmand = new RelayCommand(OnPageLoaded);
             LightCurtainStartCommand = new RelayCommand(OnStartLightCurtain);
             LightCurtainStopCommand = new RelayCommand(OnStopLightCurtain);
@@ -110,14 +113,18 @@ namespace PRND_InfraredCapture.ViewModels
             //}
 
             //차이미지 반환
+            float diffMax = 0f;
             foreach (var filePath in filePaths)
             {
-                var data = ThermalImageUtil.BuildDiffGray8FromFloatRaw(filePath, filePaths[0], width, height,0,5);
-                string imagepath = Path.Combine(ConvertTargetPath, "DiffImage", $"{i.ToString()}.png");
+                float diff =0;
+                var data = ThermalImageUtil.BuildDiffGray8FromFloatRaw(filePath, filePaths[0], width, height,0,10, ref diff);
+                if (diff > diffMax) diffMax = diff;
+                string imagepath = Path.Combine(ConvertTargetPath, "DiffImage", $"{Path.GetFileNameWithoutExtension(filePath)}.png");
                 Directory.CreateDirectory(Path.GetDirectoryName(imagepath));
                 data.Save(imagepath, ImageFormat.Png);
                 i++;
             }
+            Logger.Instance.Print(Logger.LogLevel.INFO, $"Max Diff Span : {diffMax}", true);
         }
 
         public void ChaningEvent()
@@ -177,9 +184,15 @@ namespace PRND_InfraredCapture.ViewModels
             _ProcessManager.StopAllLaserScan();
         }
 
-        private void OnCaptureImageCommand()
+        private void OnCaptureImageCommand(object obj)
         {
-            _ProcessManager.StartCaptureImageAll();
+            int index = Convert.ToInt32(obj);
+            _ProcessManager.StartCaptureWithoutLightCheck((ModuleIndex)index, (float)70.5,80,CP.OptrisCam.models.AcquisitionAngle.Angle_0);
+        }
+        private void OnGetLaserDistanceCommand(object obj)
+        {
+            int index = Convert.ToInt32(obj);
+            double distance = _ProcessManager.GetDistancebyLaser((ModuleIndex)index);
         }
 
         private void OnUpdateGrabCount(int obj)

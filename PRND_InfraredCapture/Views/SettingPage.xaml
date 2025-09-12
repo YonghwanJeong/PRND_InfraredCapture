@@ -273,7 +273,7 @@
                         <Button Content="레이저 추가" Command="{Binding AddLaserCommand}" Margin="5" HorizontalAlignment="Stretch"/>
                         <Button Grid.Column="1" Content="레이저 삭제" Command="{Binding DelLaserCommand}" Margin="5" HorizontalAlignment="Stretch"/>
                     </Grid>
-                    <ScrollViewer Height="150" Margin="10">
+                    <ScrollViewer Height="180" Margin="10">
                         <ItemsControl ItemsSource="{Binding LaserConnectionList}" AlternationCount="100000">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
@@ -316,7 +316,7 @@
                         <Button Content="로봇 추가" Command="{Binding AddRobotCommand}" Margin="5" HorizontalAlignment="Stretch"/>
                         <Button Grid.Column="1" Content="로봇삭제" Command="{Binding DelRobotCommand}" Margin="5" HorizontalAlignment="Stretch"/>
                     </Grid>
-                    <ScrollViewer Height="150" Margin="10">
+                    <ScrollViewer Height="180" Margin="10">
                         <ItemsControl ItemsSource="{Binding RobotConnectionList}" AlternationCount="100000">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
@@ -340,8 +340,7 @@
                                         <TextBox Grid.Column="2" Margin="5" VerticalAlignment="Center" Text="{Binding IPAddress, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" ToolTip="예: 192.168.0.10"/>
 
                                         <!-- Port -->
-                                        <TextBlock Grid.Column="3" Margin="5" VerticalAlignment="Center" Text="Port : " />
-                                        <TextBox Grid.Column="4" Margin="5" VerticalAlignment="Center" Text="{Binding Port, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" ToolTip="예: 2111"/>
+                                        
                                     </Grid>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>

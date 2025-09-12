@@ -44,6 +44,7 @@ namespace CP.OptrisCam.models
         private string flagState = "";
         private string _ConfigFilePath;
         private string _SaveFolderPath = "";
+        private string _PositionName = "";
         private AcquisitionAngle _AcquisitionAngle = AcquisitionAngle.Angle_0;
         private ModuleIndex _CamIndex;
         private int _FrameCount = 80;
@@ -144,22 +145,23 @@ namespace CP.OptrisCam.models
                 }
             }
         }
-        public void ReadyCapture(int focus)
+        public void ReadyCapture(float focus)
         {
             if (!IsConnected)
                 return;
 
             Imager.runAsync();
-            //Imager.setFocusMotorPosition(focus);
+            Imager.setFocusMotorPosition((float)70.5);
          //   await Task.Delay(1000);
         }
 
-        public void StartImageCapture(int frameCount, string savePath)
+        public void StartImageCapture(int frameCount, string savePath, AcquisitionAngle angle, string positionName = "")
         {
             if (!IsConnected)
                 return;
 
             _SaveFolderPath = savePath;
+            _PositionName = positionName;
             _FrameCount = frameCount;
             // reset state
             _burstDone.Reset();

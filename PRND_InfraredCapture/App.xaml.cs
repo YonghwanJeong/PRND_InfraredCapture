@@ -8,6 +8,7 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Threading;
 
 namespace PRND_InfraredCapture
 {
@@ -52,5 +53,11 @@ namespace PRND_InfraredCapture
             _bootstrapper.Dispose();
         }
 
+        private void App_DispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
+        {
+            Logger.Instance.Print(Logger.LogLevel.FATAL, $"처리되지 않은 예외 {e.Exception}");
+            MessageBox.Show("예기치 않은 오류로 인해 프로그램이 종료됩니다: " + e.Exception.Message);
+            e.Handled = true; // 프로그램 강제종료 방지
+        }
     }
 }

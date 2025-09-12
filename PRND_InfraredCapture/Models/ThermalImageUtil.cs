@@ -101,8 +101,11 @@ namespace PRND_InfraredCapture.Models
             string baselinePath,
             int width, int height,
             float normMin,       // 예: -5f (Δ°C)
-            float normMax)       // 예:  +5f (Δ°C)
+            float normMax,       // 예:  +5f (Δ°C)
+            ref float maxDiff  
+            )
         {
+            maxDiff = 0;
             int count = width * height;
 
             // 1) 파일 읽기
@@ -124,7 +127,8 @@ namespace PRND_InfraredCapture.Models
             {
                 // (1) 차(Δ) 계산
                 float diff = cur[i] - bas[i];
-
+                if( Math.Abs(diff) > Math.Abs(maxDiff))
+                    maxDiff = diff;
                 // (2) NaN/Inf 안전 처리
                 if (float.IsNaN(diff) || float.IsInfinity(diff))
                     diff = 0f;

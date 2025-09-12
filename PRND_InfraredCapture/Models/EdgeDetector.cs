@@ -27,6 +27,39 @@ namespace PRND_InfraredCapture.Models
         Bit14 = 14,
         Bit15 = 15
     }
+    public enum PLCStatusCommand
+    {
+        CarEntrySignal = BitIndex.Bit0,
+        CarExitSignal = BitIndex.Bit1,
+        TurnTableLightOn= BitIndex.Bit2,
+        TurnTableLightOff = BitIndex.Bit3,
+        ManualMode = BitIndex.Bit10,
+        AutoMode = BitIndex.Bit11,
+        MachineAlarm = BitIndex.Bit12,
+        SequenceInitialize = BitIndex.Bit14,
+        ResponseOK = BitIndex.Bit15
+    }
+    public enum RobotStatusCommand
+    {
+        MotorReady = BitIndex.Bit0,
+        RobotMoving = BitIndex.Bit1,
+        ManualMode = BitIndex.Bit2,
+        AutoMode = BitIndex.Bit3,
+        RobotEmergencyStop = BitIndex.Bit4,
+        RobotHomePosition = BitIndex.Bit5,
+        CommError = BitIndex.Bit15
+    }
+    public enum PCCommand
+    {
+        StartInspection = BitIndex.Bit0,
+        TurnAnlge0= BitIndex.Bit1,
+        TurnAnlge45 = BitIndex.Bit2,
+        TurnAnlge200 = BitIndex.Bit3,
+        TurnAnlge180 = BitIndex.Bit4,
+        PCStatusError = BitIndex.Bit14,
+        ResponseOK = BitIndex.Bit15
+    }
+
     public class EdgeDetector
     {
         private readonly Dictionary<BitIndex, bool> _prevStates = new Dictionary<BitIndex, bool>();
