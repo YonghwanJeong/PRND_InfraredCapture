@@ -61,6 +61,9 @@ namespace PRND_InfraredCapture.Models
             {
                 _port.Open();
                 if (UseRtsReceiveHold) _port.RtsEnable = RtsReceiveLevel;
+
+                DrainPortOnce();
+                Logger.Instance.Print(Logger.LogLevel.ERROR, $"Start Light Curtain", true);
             }
             catch (Exception ex)
             {
@@ -144,6 +147,23 @@ namespace PRND_InfraredCapture.Models
                     Thread.Sleep(20);
                 }
             }
+        }
+        /// <summary>
+        /// 포트의 현재 수신 버퍼를 한 번 비웁니다.
+        /// </summary>
+        private void DrainPortOnce()
+        {
+            try
+            {
+                if (_port == null || !_port.IsOpen) return;
+                int guard = 0;
+                while ((_port.BytesToRead > 0) && guard++ < 8) // 과도 루프 방지
+                {
+                    var tmp = new byte[Math.Min(_port.BytesToRead, 1024)];
+                    _port.Read(tmp, 0, tmp.Length);
+                }
+            }
+            catch { /* 무시 */ }
         }
 
         /// <summary>

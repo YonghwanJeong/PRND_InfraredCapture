@@ -82,6 +82,7 @@ namespace PRND_InfraredCapture.Models
         private int _InfraredFrameCount = 80; 
         private int _CurrentCarHeight = 0;
         int _LastSentPCResponse = 0;
+        int _LastSentLaserWarning = 0;
         // 폴링/타임아웃 파라미터
         private TimeSpan _poll = TimeSpan.FromMilliseconds(100);
         private TimeSpan _ackTimeout = TimeSpan.FromSeconds(10);    // 검사 시작 수락 대기
@@ -165,6 +166,7 @@ namespace PRND_InfraredCapture.Models
         private void _Laser_WarningStateChanged(ModuleIndex index, bool arg2)
         {
             //PLC 로직 구성 필요
+            SetLaserWarningBit((int)index, arg2);
         }
 
         public async void StopOnline()
@@ -172,38 +174,46 @@ namespace PRND_InfraredCapture.Models
             if (!IsOnlineMode)
                 return;
 
-            //LightCurtain Stop
-            _LightCurtain.Stop();
-
-            //카메라 Disconnect
-            _CamController.DisconnectAll();
-
-            //레이저 거리센서 Disconnect
-            for (int i = 0; i < _Lasers.Length; i++)
+            try
             {
-                if (!_Lasers[i].IsConnected)
-                    return;
-                await _Lasers[i].DisconnectAsync();
-                _Lasers[i].FrameReceived -= _Laser_FrameReceived;
+                //LightCurtain Stop
+                _LightCurtain.Stop();
+
+                //카메라 Disconnect
+                _CamController.DisconnectAll();
+
+                //레이저 거리센서 Disconnect
+                for (int i = 0; i < _Lasers.Length; i++)
+                {
+                    if (!_Lasers[i].IsConnected)
+                        return;
+                    await _Lasers[i].DisconnectAsync();
+                    _Lasers[i].FrameReceived -= _Laser_FrameReceived;
+                }
+
+                //PLC Disconnect
+                _HeartbeatTimer.Change(Timeout.Infinite, Timeout.Infinite);
+                _HeartbeatTimer.Dispose();
+                if (_PLCSignalMonitoringTask != null)
+                    await StopPLCMonitoringTaskAsync();
+                if (_MainLogicTask != null)
+                    await StopMainLogicTaskAsync();
+                _MCProtocolTCP.Close();
+                OnPLCDisconnected?.Invoke(false);
+
+                //Robot Disconnect
+                _RobotServer.Stop();
+                _RobotServer.Dispose();
+
+                IsOnlineMode = false;
+
+                Logger.Instance.Print(Logger.LogLevel.INFO, $"Online 모드 정지", true);
             }
-
-            //PLC Disconnect
-            _HeartbeatTimer.Change(Timeout.Infinite, Timeout.Infinite);
-            _HeartbeatTimer.Dispose();
-            if(_PLCSignalMonitoringTask!=null)
-                await StopPLCMonitoringTaskAsync();
-            if(_MainLogicTask != null)
-                await StopMainLogicTaskAsync();
-            _MCProtocolTCP.Close();
-            OnPLCDisconnected?.Invoke(false);
-
-            //Robot Disconnect
-            _RobotServer.Stop();
-            _RobotServer.Dispose();
-
-            IsOnlineMode = false;
-
-            Logger.Instance.Print(Logger.LogLevel.INFO, $"Online 모드 정지", true);
+            catch(Exception ex)
+            {
+                Logger.Instance.Print(Logger.LogLevel.ERROR, $"Online 모드 정지 중 오류 발생: {ex.Message}", true);
+            }
+            
         }
         private async Task StopMainLogicTaskAsync()
         {
@@ -498,6 +508,12 @@ namespace PRND_InfraredCapture.Models
         {
             _LastSentPCResponse = SetDevieBit(_LastSentPCResponse, index, isOn);
             await SafeSetDevice(PlcDeviceType.D, SystemParam.PLCResponseAddress, _LastSentPCResponse);
+        }
+
+        private async void SetLaserWarningBit(int index, bool isOn)
+        {
+            _LastSentLaserWarning = SetDevieBit(_LastSentLaserWarning, index, isOn);
+            await SafeSetDevice(PlcDeviceType.D, SystemParam.DistanceAlarmAddress, _LastSentLaserWarning);
         }
         private async void OnHeartBeat(object state)
         {

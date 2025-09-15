@@ -191,8 +191,26 @@ namespace PRND_InfraredCapture.ViewModels
         {
             Logger.Instance.OnLogSavedAction += OnLogSaved;
             _ProcessManager.OnCamLogsaved += OnLogSaved;
+            _ProcessManager.OnPLCDisconnected += OnPLCDisconnected;
         }
 
+        private void OnPLCDisconnected(bool isPLCConnectec)
+        {
+            if(!isPLCConnectec)
+            {
+                Application.Current?.Dispatcher.BeginInvoke(new Action(delegate ()
+                {
+                    ProgramLogs.Add("PLC Disconnected");
+                }));
+            }
+            else
+            {
+                Application.Current?.Dispatcher.BeginInvoke(new Action(delegate ()
+                {
+                    ProgramLogs.Add("PLC Connected");
+                }));
+            }
+        }
 
         private void OnLogSaved(string obj)
         {
