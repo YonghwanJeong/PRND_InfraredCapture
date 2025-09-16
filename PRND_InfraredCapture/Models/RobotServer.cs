@@ -29,16 +29,17 @@ namespace PRND_InfraredCapture.Models
         private int _stopped = 0;
         private bool _disposed;
 
+        public int RobotCount { get; set; }
         public RobotServer(IPAddress bindIp, int port, List<TCPConnectionPoint> robotConnectionList)
         {
             _listener = new TcpListener(bindIp, port);
-
+            RobotCount = robotConnectionList.Count;
             // IndexOf 대신 인덱스 루프(성능/안전)
-            for (int i = 0; i < robotConnectionList.Count; i++)
+            for (int i = 0; i < RobotCount; i++)
             {
                 var point = robotConnectionList[i];
                 // 중복 키 대비: 마지막 값으로 덮어씀
-                _ipToRobotIndex[point.IPAddress] = i + 1;
+                _ipToRobotIndex[point.IPAddress] = i;
             }
         }
 

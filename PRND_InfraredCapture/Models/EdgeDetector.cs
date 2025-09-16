@@ -6,8 +6,6 @@ using System.Threading.Tasks;
 
 namespace PRND_InfraredCapture.Models
 {
-
-
     public enum BitIndex
     {
         Bit0 = 0,

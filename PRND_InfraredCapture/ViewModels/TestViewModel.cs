@@ -151,13 +151,13 @@ namespace PRND_InfraredCapture.ViewModels
         {
             if (!_ProcessManager.IsOnlineMode)
             {
-                _ProcessManager.StartOnline();
+                _ = _ProcessManager.StartOnline();
                 OnOfflineBtnText = "Stop Online";
                 Logger.Instance.Print(Logger.LogLevel.INFO, "Change to Online Mode");
             }
             else
             {
-                _ProcessManager.StopOnline();
+                _ = _ProcessManager.StopOnline();
                 OnOfflineBtnText = "Start Online";
                 Logger.Instance.Print(Logger.LogLevel.INFO, "Change to Offline Mode");
             }
@@ -175,8 +175,8 @@ namespace PRND_InfraredCapture.ViewModels
 
         private void OnLaserStartCommand()
         {
-            _ProcessManager.GetDistancebyLaser(CP.OptrisCam.ModuleIndex.Module1);
-            _ProcessManager.GetDistancebyLaser(CP.OptrisCam.ModuleIndex.Module2);
+            //_ProcessManager.GetDistancebyLaserAsync(CP.OptrisCam.ModuleIndex.Module1);
+            //_ProcessManager.GetDistancebyLaserAsync(CP.OptrisCam.ModuleIndex.Module2);
         }
 
         private void OnLaserStopCommand()

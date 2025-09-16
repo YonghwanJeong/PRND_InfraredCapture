@@ -50,7 +50,6 @@ namespace PRND_InfraredCapture.ViewModels
         private static bool _IsFirstLoaded = true;
 
         private DateTime _lastUpdateTime = DateTime.UtcNow;
-        private int tickCount = 0;
         private ProcessManager _ProcessManager = ProcessManager.Instance;
 
 
@@ -85,7 +84,7 @@ namespace PRND_InfraredCapture.ViewModels
                 var robotServer = new RobotServer(IPAddress.Any, 50000, _ProcessManager.SystemParam.RobotConnectionList);
                 var serverTask = robotServer.StartAsync();
 
-                var session1 = await WaitGetSessionAsync(robotServer, 1,
+                var session1 = await WaitGetSessionAsync(robotServer, 0,
                     TimeSpan.FromSeconds(20), TimeSpan.FromMilliseconds(100), token).ConfigureAwait(false);
 
                 if (session1 == null)
@@ -94,14 +93,14 @@ namespace PRND_InfraredCapture.ViewModels
                     return;
                 }
 
-                var session2 = await WaitGetSessionAsync(robotServer, 2,
-                  TimeSpan.FromSeconds(20), TimeSpan.FromMilliseconds(100), token).ConfigureAwait(false);
+                //var session2 = await WaitGetSessionAsync(robotServer, 2,
+                //  TimeSpan.FromSeconds(20), TimeSpan.FromMilliseconds(100), token).ConfigureAwait(false);
 
-                if (session2 == null)
-                {
-                    Logger.Instance.Print(Logger.LogLevel.ERROR, "로봇1 TCP 세션 없음(타임아웃)", true);
-                    return;
-                }
+                //if (session2 == null)
+                //{
+                //    Logger.Instance.Print(Logger.LogLevel.ERROR, "로봇1 TCP 세션 없음(타임아웃)", true);
+                //    return;
+                //}
 
 
 
@@ -134,32 +133,32 @@ namespace PRND_InfraredCapture.ViewModels
                 });
 
                 FireAndForget(bgTask);
-                await Task.Run(async () =>
-                {
-                    await session2.SendLineAsync("poseMsg", token).ConfigureAwait(false);
+                //await Task.Run(async () =>
+                //{
+                //    await session2.SendLineAsync("poseMsg", token).ConfigureAwait(false);
 
-                    using (var rxTimeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(30)))
-                    using (var linked = CancellationTokenSource.CreateLinkedTokenSource(token, rxTimeoutCts.Token))
-                    {
-                        try
-                        {
-                            await _ProcessManager.ExpectWithRetryAsync(session2, "test", async () =>
-                            {
-                                await session2.SendLineAsync("poseMsg", token).ConfigureAwait(false);
-                            }, linked.Token).ConfigureAwait(false);
-                        }
-                        catch (TimeoutException)
-                        {
-                            Logger.Instance.Print(Logger.LogLevel.ERROR, "응답 수신 재시도 초과(타임아웃)", true);
-                            return;
-                        }
-                        catch (OperationCanceledException)
-                        {
-                            Logger.Instance.Print(Logger.LogLevel.INFO, "사용자/상위 취소로 수신 대기 중단", true);
-                            return;
-                        }
-                    }
-                });
+                //    using (var rxTimeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(30)))
+                //    using (var linked = CancellationTokenSource.CreateLinkedTokenSource(token, rxTimeoutCts.Token))
+                //    {
+                //        try
+                //        {
+                //            await _ProcessManager.ExpectWithRetryAsync(session2, "test", async () =>
+                //            {
+                //                await session2.SendLineAsync("poseMsg", token).ConfigureAwait(false);
+                //            }, linked.Token).ConfigureAwait(false);
+                //        }
+                //        catch (TimeoutException)
+                //        {
+                //            Logger.Instance.Print(Logger.LogLevel.ERROR, "응답 수신 재시도 초과(타임아웃)", true);
+                //            return;
+                //        }
+                //        catch (OperationCanceledException)
+                //        {
+                //            Logger.Instance.Print(Logger.LogLevel.INFO, "사용자/상위 취소로 수신 대기 중단", true);
+                //            return;
+                //        }
+                //    }
+                //});
 
 
 
@@ -229,43 +228,20 @@ namespace PRND_InfraredCapture.ViewModels
         {
             if (!_ProcessManager.IsOnlineMode)
             {
-                _ProcessManager.StartOnline();
+                _ = _ProcessManager.StartOnline();
                 OnOfflineBtnText = "Stop Online";
                 Logger.Instance.Print(Logger.LogLevel.INFO, "Change to Online Mode");
             }
             else
             {
-                _ProcessManager.StopOnline();
+                _ = _ProcessManager.StopOnline();
                 OnOfflineBtnText = "Start Online";
                 Logger.Instance.Print(Logger.LogLevel.INFO, "Change to Offline Mode");
             }
 
         }
-        private void OnStartLightCurtain()
-        {
-            _ProcessManager.StartLightCurtain();
-        }
 
-        private void OnStopLightCurtain()
-        {
-            _ProcessManager.StopLightCurtain();
-        }
-
-        private void OnLaserStartCommand()
-        {
-            _ProcessManager.GetDistancebyLaser(CP.OptrisCam.ModuleIndex.Module1);
-            _ProcessManager.GetDistancebyLaser(CP.OptrisCam.ModuleIndex.Module2);
-        }
-
-        private void OnLaserStopCommand()
-        {
-            _ProcessManager.StopAllLaserScan();
-        }
-
-        private void OnCaptureImageCommand()
-        {
-            _ProcessManager.StartCaptureImageAll();
-        }
+      
 
         private void OnUpdateGrabCount(int obj)
         {

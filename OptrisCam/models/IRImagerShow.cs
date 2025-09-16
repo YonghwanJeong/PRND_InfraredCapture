@@ -152,7 +152,6 @@ namespace CP.OptrisCam.models
 
             Imager.runAsync();
             Imager.setFocusMotorPosition((float)70.5);
-         //   await Task.Delay(1000);
         }
 
         public void StartImageCapture(int frameCount, string savePath, AcquisitionAngle angle, string positionName = "")

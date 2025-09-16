@@ -42,12 +42,12 @@
                                 <!-- 줄간격 최소화 -->
                                 <Style TargetType="TextBlock">
                                     <Setter Property="VerticalAlignment" Value="Center"/>
-                                    <Setter Property="Margin" Value="0,2,6,2"/>
+                                    <Setter Property="Margin" Value="0,1,6,1"/>
                                     <Setter Property="FontSize" Value="14"/>
                                 </Style>
                                 <Style TargetType="TextBox">
                                     <Setter Property="VerticalAlignment" Value="Center"/>
-                                    <Setter Property="Margin" Value="0,2,0,2"/>
+                                    <Setter Property="Margin" Value="0,1,0,1"/>
                                     <Setter Property="FontSize" Value="14"/>
                                     <Setter Property="MinHeight" Value="35"/>
                                     <Setter Property="VerticalContentAlignment" Value="Center"/>
@@ -121,12 +121,12 @@
                             <Grid.Resources>
                                 <Style TargetType="TextBlock">
                                     <Setter Property="VerticalAlignment" Value="Center"/>
-                                    <Setter Property="Margin" Value="0,2,6,2"/>
+                                    <Setter Property="Margin" Value="0,1,6,1"/>
                                     <Setter Property="FontSize" Value="14"/>
                                 </Style>
                                 <Style TargetType="TextBox">
                                     <Setter Property="VerticalAlignment" Value="Center"/>
-                                    <Setter Property="Margin" Value="0,2,0,2"/>
+                                    <Setter Property="Margin" Value="0,1,0,1"/>
                                     <Setter Property="FontSize" Value="14"/>
                                     <Setter Property="MinHeight" Value="35"/>
                                     <Setter Property="VerticalContentAlignment" Value="Center"/>
@@ -240,13 +240,13 @@
 
                                         <!-- AlternationIndex: 컨테이너(ContentPresenter)에서 읽기 -->
                                         <TextBlock Grid.Column="0"
-               Margin="5"
-               VerticalAlignment="Center"
-               HorizontalAlignment="Center"
-               Text="{Binding Path=(ItemsControl.AlternationIndex),
-                              RelativeSource={RelativeSource AncestorType=ContentPresenter},
-                              Converter={StaticResource AddNumberConverter},
-                              ConverterParameter=1}" />
+                                       Margin="5"
+                                       VerticalAlignment="Center"
+                                       HorizontalAlignment="Center"
+                                       Text="{Binding Path=(ItemsControl.AlternationIndex),
+                                        RelativeSource={RelativeSource AncestorType=ContentPresenter},
+                                        Converter={StaticResource AddNumberConverter},
+                                        ConverterParameter=1}" /> 
 
                                         <!-- DataContext는 ItemsControl의 DataContext를 바라보게 -->
                                         <controls:FilePathTextBox Grid.Column="1"
@@ -286,11 +286,11 @@
                                             <ColumnDefinition Width="120"/>
                                         </Grid.ColumnDefinitions>
                                         <TextBlock Grid.Column="0" Margin="5"
-                       VerticalAlignment="Center" HorizontalAlignment="Center"
-                       Text="{Binding Path=(ItemsControl.AlternationIndex),
-                              RelativeSource={RelativeSource AncestorType=ContentPresenter},
-                              Converter={StaticResource AddNumberConverter},
-                              ConverterParameter=1}"/>
+                                       VerticalAlignment="Center" HorizontalAlignment="Center"
+                                       Text="{Binding Path=(ItemsControl.AlternationIndex),
+                                              RelativeSource={RelativeSource AncestorType=ContentPresenter},
+                                              Converter={StaticResource AddNumberConverter},
+                                              ConverterParameter=1}"/>
 
                                         <!-- IP -->
                                         <TextBlock Grid.Column="1" Margin="5" VerticalAlignment="Center" Text="IP : " />
@@ -329,11 +329,11 @@
                                             <ColumnDefinition Width="120"/>
                                         </Grid.ColumnDefinitions>
                                         <TextBlock Grid.Column="0" Margin="5"
-           VerticalAlignment="Center" HorizontalAlignment="Center"
-           Text="{Binding Path=(ItemsControl.AlternationIndex),
-                  RelativeSource={RelativeSource AncestorType=ContentPresenter},
-                  Converter={StaticResource AddNumberConverter},
-                  ConverterParameter=1}"/>
+                                       VerticalAlignment="Center" HorizontalAlignment="Center"
+                                       Text="{Binding Path=(ItemsControl.AlternationIndex),
+                                              RelativeSource={RelativeSource AncestorType=ContentPresenter},
+                                              Converter={StaticResource AddNumberConverter},
+                                              ConverterParameter=1}"/>  
 
                                         <!-- IP -->
                                         <TextBlock Grid.Column="1" Margin="5" VerticalAlignment="Center" Text="IP : " />

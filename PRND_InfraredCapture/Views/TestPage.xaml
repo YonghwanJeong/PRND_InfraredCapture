@@ -20,32 +20,46 @@
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="*"/>
-            <RowDefinition Height="0"/>
+            <RowDefinition Height="*"/>
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
         <StackPanel>
             <Button Content="{Binding OnOfflineBtnText}" Command="{Binding ControlOnOffLineCommand}" />
+            <Button Content="LightCurtain Start" Command="{Binding LightCurtainStartCommand}"/>
+            <Button Content="LightCurtain Stop" Command="{Binding LightCurtainStopCommand}"/>
+            <Button Content="Laser Start" Command="{Binding LaserStartCommand}"/>
+            <Button Content="Laser Stop" Command="{Binding LaserStopCommand}"/>
+        </StackPanel>
+        <StackPanel Grid.Column="1">
             <Button Content="Capture Cam1" Command="{Binding CaptureImageCommand}" CommandParameter="0"/>
             <Button Content="Capture Cam2" Command="{Binding CaptureImageCommand}" CommandParameter="1"/>
             <Button Content="Capture Cam3" Command="{Binding CaptureImageCommand}" CommandParameter="2"/>
             <Button Content="Capture Cam4" Command="{Binding CaptureImageCommand}" CommandParameter="3"/>
-            <Button Content="Laser Start" Command="{Binding LaserStartCommand}"/>
-            <Button Content="Laser Stop" Command="{Binding LaserStopCommand}"/>
             <Button Content="Get Distance 1" Command="{Binding GetLaserDistanceCommand}" CommandParameter="0"/>
             <Button Content="Get Distance 2" Command="{Binding GetLaserDistanceCommand}" CommandParameter="1"/>
             <Button Content="Get Distance 3" Command="{Binding GetLaserDistanceCommand}" CommandParameter="2"/>
             <Button Content="Get Distance 4" Command="{Binding GetLaserDistanceCommand}" CommandParameter="3"/>
-            <Button Content="LightCurtain Start" Command="{Binding LightCurtainStartCommand}"/>
-            <Button Content="LightCurtain Stop" Command="{Binding LightCurtainStopCommand}"/>
+        </StackPanel>
+        <StackPanel Grid.Column="2">
+
+        </StackPanel>
+        <StackPanel Grid.Column="3">
             
+        </StackPanel>
+        <StackPanel Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2">
             <controls:FilePathTextBox ControlNameWidth="150" ControlName="Raw Source 경로: " FilePath="{Binding RawSourcePath, Mode=TwoWay}" Margin="10" IsFolderPicker="True"/>
             <controls:FilePathTextBox ControlNameWidth="150" ControlName="Convert Target 경로: " FilePath="{Binding ConvertTargetPath, Mode=TwoWay}" Margin="10" IsFolderPicker="True"/>
             <Button Content="Convert" Command="{Binding ConvertRawToBitmapCommand}"/>
-            
-            
         </StackPanel>
+
         <!--<controls:ImagePanel Grid.Row="1" ImageSource="{Binding TestImage}" Height="300"/>-->
-        <GroupBox Grid.Row="2" Header="Program Log" Margin="10" >
+        <GroupBox Grid.Row="2" Header="Program Log" Margin="10" Grid.ColumnSpan="4" >
             <ListBox BorderThickness="1" ItemsSource="{Binding ProgramLogs, Mode=OneWay}"  Margin="5" FontSize="4" Height="300">
                 <i:Interaction.Behaviors>
                     <behaviors:ScrollIntoViewBehavior/>
