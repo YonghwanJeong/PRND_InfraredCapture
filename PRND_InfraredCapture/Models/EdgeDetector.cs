@@ -40,12 +40,13 @@ namespace PRND_InfraredCapture.Models
     public enum RobotStatusCommand
     {
         MotorReady = BitIndex.Bit0,
-        RobotMoving = BitIndex.Bit1,
+        RobotOnline = BitIndex.Bit1,
         ManualMode = BitIndex.Bit2,
         AutoMode = BitIndex.Bit3,
         RobotEmergencyStop = BitIndex.Bit4,
         RobotHomePosition = BitIndex.Bit5,
-        CommError = BitIndex.Bit15
+        CommError = BitIndex.Bit15,
+        RobotMoving = BitIndex.Bit6
     }
     public enum PCCommand
     {
