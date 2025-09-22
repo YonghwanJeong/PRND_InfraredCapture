@@ -57,8 +57,8 @@ namespace PRND_InfraredCapture.Models
         private EdgeDetector _PLCCommandEdgeDetector = new EdgeDetector();
         private Task _PLCSignalMonitoringTask;
         private Timer _HeartbeatTimer;
-        private int _heartbeatGate = 0; // 0: idle, 1: running
         private bool _IsHeartBeatOn = false;
+        private int _heartbeatGate = 0; // 0: idle, 1: running
 
         private CancellationTokenSource _MainLogicCts;
         private Task _MainLogicTask;
@@ -194,7 +194,7 @@ namespace PRND_InfraredCapture.Models
                     //레이저 거리센서 Disconnect
                     for (int i = 0; i < _Lasers.Length; i++)
                     {
-                        if (!_Lasers[i].IsConnected)
+                        if (_Lasers[i] != null || !_Lasers[i].IsConnected)
                             continue;
                         await _Lasers[i].DisconnectAsync();
                         _Lasers[i].FrameReceived -= _Laser_FrameReceived;
@@ -340,8 +340,7 @@ namespace PRND_InfraredCapture.Models
                         bool checkAck = await WaitForWordBitAsync(PlcDeviceType.D, SystemParam.PLCStatusAddress, (int)PLCStatusCommand.ResponseOK, true, _ackTimeout, _poll, token, "").ConfigureAwait(false);
                         if (!checkAck)
                             Logger.Instance.Print(Logger.LogLevel.INFO, $"PLC 응답 없음", true);
-                        else
-                            await SetPCResponseBit((int)PCCommand.ResponseOK, false); //응답 완료 신호 off
+                        await SetPCResponseBit((int)PCCommand.ResponseOK, false); //응답 완료 신호 off
 
                         _LightCurtain.Start(SystemParam.LightCurtainHeightOffset);
 
@@ -364,7 +363,87 @@ namespace PRND_InfraredCapture.Models
         }
         private async Task TestFunc(CancellationToken token)
         {
-            await TCPTestAsync(token).ConfigureAwait(false);
+            //await TCPTestAsync(token).ConfigureAwait(false);
+            await PLCCommTestAsync(token).ConfigureAwait(false);
+        }
+        private async Task PLCCommTestAsync(CancellationToken token)
+        {
+            if (_IsInspectionRunning)
+            {
+                Logger.Instance.Print(Logger.LogLevel.INFO, "이미 Sequence가 시작 중입니다.", true);
+                return;
+            }
+            _IsInspectionRunning = true;
+
+            await SetPCResponseBit((int)PCCommand.StartInspection, true); //검사 시작 On
+                                                                          // 2) PLC -> PC : 특정 워드의 특정 비트가 ON 될 때까지 폴링
+            bool ResponseAck = await WaitForWordBitAsync(PlcDeviceType.D, SystemParam.PLCStatusAddress, (int)PLCStatusCommand.ResponseOK, true, _ackTimeout, _poll, token, "START_ACK").ConfigureAwait(false);
+            if (!ResponseAck)
+                Logger.Instance.Print(Logger.LogLevel.INFO, $"PLC 응답 없음", true);
+            await SetPCResponseBit((int)PCCommand.StartInspection, false); //검사 시작 Off
+
+
+            //차량 높이 정보 업데이트
+            _CurrentCarHeight = _LightCurtain.Stop();
+            OnSendCarHeight?.Invoke(_CurrentCarHeight);
+
+            //턴테이블 조명 ON 확인
+            bool lightOnAck = await WaitForWordBitAsync(PlcDeviceType.D, SystemParam.PLCStatusAddress, (int)PLCStatusCommand.TurnTableLightOn, true, _ackTimeout, _poll, token, "START_ACK").ConfigureAwait(false);
+            if (!lightOnAck)
+                Logger.Instance.Print(Logger.LogLevel.INFO, $"턴테이블 조명 응답 없음", true);
+
+            //45도 회전 요청
+            await SetPCResponseBit((int)PCCommand.TurnAnlge45, true); // 45도 회전 요청
+                                                                      // 2) PLC -> PC : 특정 워드의 특정 비트가 ON 될 때까지 폴링
+            ResponseAck = await WaitForWordBitAsync(PlcDeviceType.D, SystemParam.PLCStatusAddress, (int)PLCStatusCommand.ResponseOK, true, _ackTimeout, _poll, token, "START_ACK").ConfigureAwait(false);
+            if (!ResponseAck)
+                Logger.Instance.Print(Logger.LogLevel.INFO, $"PLC 응답 없음", true);
+            await SetPCResponseBit((int)PCCommand.TurnAnlge45, false); //45도 회전 완료 off
+
+            bool roatateAck = await WaitForWordBitAsync(PlcDeviceType.D, SystemParam.TurnTableAngleAddress, (int)PCCommand.TurnAnlge45, true, _doneTimeout, _poll, token, "roatateAck").ConfigureAwait(false);
+            if (!roatateAck)
+                Logger.Instance.Print(Logger.LogLevel.INFO, $"PLC 응답 없음", true);
+            await SetPCResponseBit((int)PCCommand.TurnAnlge45, false);
+
+
+            //200도 회전 요청
+            await SetPCResponseBit((int)PCCommand.TurnAnlge200, true); // 45도 회전 요청
+                                                                       // 2) PLC -> PC : 특정 워드의 특정 비트가 ON 될 때까지 폴링
+            ResponseAck = await WaitForWordBitAsync(PlcDeviceType.D, SystemParam.PLCStatusAddress, (int)PLCStatusCommand.ResponseOK, true, _ackTimeout, _poll, token, "START_ACK").ConfigureAwait(false);
+            if (!ResponseAck)
+                Logger.Instance.Print(Logger.LogLevel.INFO, $"PLC 응답 없음", true);
+            await SetPCResponseBit((int)PCCommand.TurnAnlge200, false); //45도 회전 완료 off
+
+            roatateAck = await WaitForWordBitAsync(PlcDeviceType.D, SystemParam.TurnTableAngleAddress, (int)PCCommand.TurnAnlge200, true, _doneTimeout, _poll, token, "roatateAck").ConfigureAwait(false);
+            if (!roatateAck)
+                Logger.Instance.Print(Logger.LogLevel.INFO, $"PLC 응답 없음", true);
+            await SetPCResponseBit((int)PCCommand.TurnAnlge200, false);
+
+
+            //45도 회전 요청
+            await SetPCResponseBit((int)PCCommand.TurnAnlge180, true); // 45도 회전 요청
+                                                                       // 2) PLC -> PC : 특정 워드의 특정 비트가 ON 될 때까지 폴링
+            ResponseAck = await WaitForWordBitAsync(PlcDeviceType.D, SystemParam.PLCStatusAddress, (int)PLCStatusCommand.ResponseOK, true, _ackTimeout, _poll, token, "START_ACK").ConfigureAwait(false);
+            if (!ResponseAck)
+                Logger.Instance.Print(Logger.LogLevel.INFO, $"PLC 응답 없음", true);
+            await SetPCResponseBit((int)PCCommand.TurnAnlge180, false); //45도 회전 완료 off
+
+            roatateAck = await WaitForWordBitAsync(PlcDeviceType.D, SystemParam.TurnTableAngleAddress, (int)PCCommand.TurnAnlge0, true, _doneTimeout, _poll, token, "roatateAck").ConfigureAwait(false);
+            if (!roatateAck)
+                Logger.Instance.Print(Logger.LogLevel.INFO, $"PLC 응답 없음", true);
+            await SetPCResponseBit((int)PCCommand.TurnAnlge180, false);
+
+            bool isCarExit = await WaitForWordBitAsync(PlcDeviceType.D, SystemParam.PLCStatusAddress, (int)PLCStatusCommand.CarExitSignal, true, _doneTimeout, _poll, token, "CAREXIT_ACK").ConfigureAwait(false);
+            if (!isCarExit)
+                Logger.Instance.Print(Logger.LogLevel.INFO, $"차량 출차 응답없음", true);
+            await SetPCResponseBit((int)PCCommand.ResponseOK, true);
+            isCarExit = await WaitForWordBitAsync(PlcDeviceType.D, SystemParam.PLCStatusAddress, (int)PLCStatusCommand.CarExitSignal, false, _ackTimeout, _poll, token, "CAREXIT_ACK").ConfigureAwait(false);
+            if (!isCarExit)
+                Logger.Instance.Print(Logger.LogLevel.INFO, $"응답완료 신호 응답없음", true);
+            await SetPCResponseBit((int)PCCommand.ResponseOK, false);
+
+            _IsInspectionRunning = false;
+
         }
         private async Task CommTestTask(string carNumber, CancellationToken token)
         {
@@ -439,8 +518,7 @@ namespace PRND_InfraredCapture.Models
                 bool ResponseAck = await WaitForWordBitAsync(PlcDeviceType.D, SystemParam.PLCStatusAddress, (int)PLCStatusCommand.ResponseOK, true, _ackTimeout, _poll, token, "START_ACK").ConfigureAwait(false);
                 if (!ResponseAck)
                     Logger.Instance.Print(Logger.LogLevel.INFO, $"PLC 응답 없음", true);
-                else
-                    await SetPCResponseBit((int)PCCommand.StartInspection, false); //검사 시작 Off
+                await SetPCResponseBit((int)PCCommand.StartInspection, false); //검사 시작 Off
 
                 //차량 높이 정보 업데이트
                 _CurrentCarHeight = _LightCurtain.Stop();
@@ -548,11 +626,10 @@ namespace PRND_InfraredCapture.Models
                 //회전 요청
                 await SetPCResponseBit((int)PCCommand.TurnAnlge45, true); // 45도 회전 요청
                 // 2) PLC -> PC : 특정 워드의 특정 비트가 ON 될 때까지 폴링
-                bool roatateAck = await WaitForWordBitAsync(PlcDeviceType.D, SystemParam.TurnTableAngleAddress, 2, true, _doneTimeout, _poll, token, "roatateAck").ConfigureAwait(false);
+                bool roatateAck = await WaitForWordBitAsync(PlcDeviceType.D, SystemParam.TurnTableAngleAddress, (int)PCCommand.TurnAnlge45, true, _doneTimeout, _poll, token, "roatateAck").ConfigureAwait(false);
                 if (!roatateAck)
                     Logger.Instance.Print(Logger.LogLevel.INFO, $"PLC 응답 없음", true);
-                else
-                    await SetPCResponseBit((int)PCCommand.TurnAnlge45, false);
+                await SetPCResponseBit((int)PCCommand.TurnAnlge45, false);
 
 
                 //Step2
@@ -934,7 +1011,11 @@ namespace PRND_InfraredCapture.Models
         public void StopAllLaserScan()
         {
             for (int i = 0; i < _Lasers.Length; i++)
-                _Lasers[i].Stop();
+            {
+                if(_Lasers[i] != null && _Lasers[i].IsConnected)
+                    _Lasers[i].Stop();
+            }
+                
         }
 
         public void ConnectCam()
@@ -1004,8 +1085,7 @@ namespace PRND_InfraredCapture.Models
                 bool robotStartAck = await WaitForWordBitAsync(PlcDeviceType.D, robotStatus, (int)RobotStatusCommand.RobotMoving, true, _ackTimeout, _poll, token, "robotStartAck").ConfigureAwait(false); 
                 if (!robotStartAck)
                     Logger.Instance.Print(Logger.LogLevel.WARN, $"{Enum.GetName(typeof(ModuleIndex), moduleIndex)} 로봇 이동 요청에 PLC 응답 없음", true);
-                else
-                    await SafeSetDevice(PlcDeviceType.D, moveAddress, 0);
+                await SafeSetDevice(PlcDeviceType.D, moveAddress, 0);
 
 
                 bool moveDone = await WaitForWordBitAsync(PlcDeviceType.D, robotStatus, (int)RobotStatusCommand.RobotMoving, false, _doneTimeout, _poll, token, "MOVE_DONE").ConfigureAwait(false); //이동 완료 대기
@@ -1057,7 +1137,7 @@ namespace PRND_InfraredCapture.Models
                     _CamController.ReadyCapture(index, focus);
                     await Task.Delay(1000);
                     _CamController.CaptureImage(index, framecnt, SystemParam.ImageDataSavePath, angle, positionName);
-                    await TurnOnLight(index, triggerAddress);
+                    await TurnOnLight(index, triggerAddress, statusAddress);
                 }
             }
             catch (Exception ex)
@@ -1096,7 +1176,7 @@ namespace PRND_InfraredCapture.Models
             try
             {
                 CancellationToken token = new CancellationToken();
-                bool lightAck = await WaitForWordBitsAsync(PlcDeviceType.D, statusAddress, new[] { 0, 1 }, true, _ackTimeout, _poll, token, "lightAck ").ConfigureAwait(false);
+                bool lightAck = await WaitForWordBitsAsync(PlcDeviceType.D, statusAddress, new[] { (int)LightSatusCommand.Light1Ready, (int)LightSatusCommand.Light2Ready }, true, _ackTimeout, _poll, token, "lightAck ").ConfigureAwait(false);
                 if (!lightAck)
                     Logger.Instance.Print(Logger.LogLevel.INFO, $"{Enum.GetName(typeof(ModuleIndex), index)} 조명 상태를 확인하세요", true);
             }
@@ -1106,7 +1186,7 @@ namespace PRND_InfraredCapture.Models
             }
 
         }
-        private async Task TurnOnLight(ModuleIndex index, int triggerAddress)
+        private async Task TurnOnLight(ModuleIndex index, int triggerAddress, int statusAddrdss)
         {
             if (!IsOnlineMode)
                 return;
@@ -1118,11 +1198,10 @@ namespace PRND_InfraredCapture.Models
                 CancellationToken token = new CancellationToken();
                 await SafeSetDevice(PlcDeviceType.D, triggerAddress, 1);
                 // 2) PLC -> PC : 특정 워드의 특정 비트가 ON 될 때까지 폴링
-                bool startAck = await WaitForWordBitAsync(PlcDeviceType.D, SystemParam.PLCStatusAddress, (int)PLCStatusCommand.ResponseOK, true, _ackTimeout, _poll, token, "START_ACK").ConfigureAwait(false); //응답 대기
-                if (!startAck)
+                bool lightON_ACK = await WaitForWordBitAsync(PlcDeviceType.D, statusAddrdss, (int)LightSatusCommand.ResponseOK, true, _ackTimeout, _poll, token, "LightON_ACK").ConfigureAwait(false); //응답 대기
+                if (!lightON_ACK)
                     Logger.Instance.Print(Logger.LogLevel.WARN, $"{Enum.GetName(typeof(ModuleIndex), index)} 조명 On 요청세 PLC 응답 없음", true);
-                else
-                    await SafeSetDevice(PlcDeviceType.D, triggerAddress, 0);
+                await SafeSetDevice(PlcDeviceType.D, triggerAddress, 0);
             }
             catch(Exception ex)
             {

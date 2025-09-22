@@ -59,6 +59,13 @@ namespace PRND_InfraredCapture.Models
         ResponseOK = BitIndex.Bit15
     }
 
+    public enum  LightSatusCommand
+    {
+        Light1Ready  = BitIndex.Bit0,
+        Light2Ready  = BitIndex.Bit1,
+        ResponseOK   = BitIndex.Bit15
+    }
+
     public class EdgeDetector
     {
         private readonly Dictionary<BitIndex, bool> _prevStates = new Dictionary<BitIndex, bool>();
