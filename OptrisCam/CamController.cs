@@ -40,11 +40,11 @@ namespace CP.OptrisCam
             {
                 _OptrisCams[(int)camIndex].Disconnect();
                 _OptrisCams[(int)camIndex].Connect();
-                CamLogger.Instance.Print(CamLogger.LogLevel.INFO, $"{Enum.GetName(typeof(ModuleIndex), camIndex)} Connected", true);
+                CamLogger.Instance.Print(CamLogger.LogLevel.INFO, $"{Enum.GetName(typeof(ModuleIndex), camIndex)} Cam Connected", true);
             }
             catch (SDKException ex)
             {
-                CamLogger.Instance.Print(CamLogger.LogLevel.ERROR, $"{Enum.GetName(typeof(ModuleIndex), camIndex)} Connect Error: {ex.Message}", true);
+                CamLogger.Instance.Print(CamLogger.LogLevel.ERROR, $"{Enum.GetName(typeof(ModuleIndex), camIndex)} Cam Connect Error: {ex.Message}", true);
             }
         }
 
@@ -53,7 +53,7 @@ namespace CP.OptrisCam
             if (_OptrisCams[(int)index].IsConnected)
             {
                 _OptrisCams[(int)index].ReadyCapture(focus);
-                CamLogger.Instance.Print(CamLogger.LogLevel.INFO, $"{Enum.GetName(typeof(ModuleIndex), index)} Ready Capture");
+                CamLogger.Instance.Print(CamLogger.LogLevel.INFO, $"{Enum.GetName(typeof(ModuleIndex), index)} Cam Ready Capture");
             }
         }
         public void CaptureImage(ModuleIndex index, int framecnt, string savePath,  AcquisitionAngle angle, string positionName = "")
@@ -66,7 +66,7 @@ namespace CP.OptrisCam
             if (!_OptrisCams[(int)camIndex].IsConnected)
                 return;
             _OptrisCams[(int)camIndex].Disconnect();
-            CamLogger.Instance.Print(CamLogger.LogLevel.INFO, $"{Enum.GetName(typeof(ModuleIndex), camIndex)} Disconnected", true);
+            CamLogger.Instance.Print(CamLogger.LogLevel.INFO, $"{Enum.GetName(typeof(ModuleIndex), camIndex)} Cam Disconnected", true);
         }
         public void DisconnectAll()
         {

@@ -9,6 +9,14 @@ using System.Threading.Tasks;
 
 namespace PRND_InfraredCapture.Models
 {
+    public enum RobotIndex
+    {
+        Robot1 = 0,
+        Robot2 = 1,
+        Robot3 = 2,
+        Robot4 = 3,
+    }
+
     public sealed class RobotServer : IDisposable
     {
         private readonly TcpListener _listener;
@@ -98,7 +106,7 @@ namespace PRND_InfraredCapture.Models
                     }
 
                     _sessions[robotIndex] = session;
-                    Logger.Instance.Print(Logger.LogLevel.INFO, $"Robot {robotIndex} connected from {ip}", true);
+                    Logger.Instance.Print(Logger.LogLevel.INFO, $"{Enum.GetName(typeof(RobotIndex),robotIndex)}  connected from {ip}", true);
 
                     try
                     {
@@ -108,7 +116,7 @@ namespace PRND_InfraredCapture.Models
                     {
                         RobotSession removed;
                         _sessions.TryRemove(robotIndex, out removed);
-                        Logger.Instance.Print(Logger.LogLevel.INFO, $"Robot {robotIndex} disconnected", true);
+                        Logger.Instance.Print(Logger.LogLevel.INFO, $"{Enum.GetName(typeof(RobotIndex), robotIndex)} disconnected", true);
                     }
                 }
                 catch (Exception ex)

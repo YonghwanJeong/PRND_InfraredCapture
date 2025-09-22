@@ -466,11 +466,11 @@ namespace PRND_InfraredCapture.Models
                     var session = await WaitGetSessionAsync(_RobotServer, i, TimeSpan.FromSeconds(1), TimeSpan.FromMilliseconds(100), token).ConfigureAwait(false);
                     if (session == null)
                     {
-                        Logger.Instance.Print(Logger.LogLevel.ERROR, $"로봇{i} TCP 세션 없음(타임아웃)", true);
+                        Logger.Instance.Print(Logger.LogLevel.ERROR, $"{Enum.GetName(typeof(RobotIndex), i)} TCP 세션 없음(타임아웃)", true);
                         return;
                     }
                     robotSessions[i] = session;
-                    Logger.Instance.Print(Logger.LogLevel.INFO, $"로봇{i} TCP 세션 연결됨", true);
+                    Logger.Instance.Print(Logger.LogLevel.INFO, $"{Enum.GetName(typeof(RobotIndex), i)} TCP 세션 연결됨", true);
                 }
 
                 //Step1
@@ -537,11 +537,11 @@ namespace PRND_InfraredCapture.Models
                     var session = await WaitGetSessionAsync(_RobotServer, i, TimeSpan.FromSeconds(1), TimeSpan.FromMilliseconds(100), token).ConfigureAwait(false);
                     if (session == null)
                     {
-                        Logger.Instance.Print(Logger.LogLevel.ERROR, $"로봇{i} TCP 세션 없음(타임아웃)", true);
+                        Logger.Instance.Print(Logger.LogLevel.ERROR, $"{Enum.GetName(typeof(RobotIndex), i)} TCP 세션 없음(타임아웃)", true);
                         return;
                     }
                     robotSessions[i] = session;
-                    Logger.Instance.Print(Logger.LogLevel.INFO, $"로봇{i} TCP 세션 연결됨", true);
+                    Logger.Instance.Print(Logger.LogLevel.INFO, $"{Enum.GetName(typeof(RobotIndex), i)} TCP 세션 연결됨", true);
                 }
 
                 //Step1

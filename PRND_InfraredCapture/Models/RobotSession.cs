@@ -138,7 +138,7 @@ namespace PRND_InfraredCapture.Models
             catch (OperationCanceledException) { }
             catch (Exception ex)
             {
-                Logger.Instance.Print(Logger.LogLevel.WARN, $"[R{RobotIndex}] ReadLoop stop: {ex.Message}", true);
+                Logger.Instance.Print(Logger.LogLevel.WARN, $"[{Enum.GetName(typeof(RobotIndex), RobotIndex)} ReadLoop stop: {ex.Message}", true);
             }
         }
 
@@ -162,7 +162,7 @@ namespace PRND_InfraredCapture.Models
             catch (OperationCanceledException) { }
             catch (Exception ex)
             {
-                Logger.Instance.Print(Logger.LogLevel.WARN, $"[R{RobotIndex}] WriteLoop stop: {ex.Message}", true);
+                Logger.Instance.Print(Logger.LogLevel.WARN, $"{Enum.GetName(typeof(RobotIndex), RobotIndex)} WriteLoop stop: {ex.Message}", true);
             }
         }
         private static string NormalizeLine(string s)
