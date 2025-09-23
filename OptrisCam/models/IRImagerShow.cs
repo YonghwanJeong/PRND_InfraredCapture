@@ -241,11 +241,11 @@ namespace CP.OptrisCam.models
 
                     string time = $"{frame.Timestamp:yyyy-MM-dd-HH-mm-ss-fff}";
                     string imageName = $"{frame.FrameIndex}_{time}.bmp";
-                    string imageSavePath = Path.Combine(_SaveFolderPath, Enum.GetName(typeof(ModuleIndex), _CamIndex),"Image", imageName);
+                    string imageSavePath = Path.Combine(_SaveFolderPath, $"{_PositionName}_{Enum.GetName(typeof(ModuleIndex), _CamIndex)}","Image", imageName);
                     string rawName = $"{frame.FrameIndex}_{time}.raw";
-                    string rawSavePath = Path.Combine(_SaveFolderPath, Enum.GetName(typeof(ModuleIndex), _CamIndex), "Raw", rawName);
+                    string rawSavePath = Path.Combine(_SaveFolderPath, $"{_PositionName}_{Enum.GetName(typeof(ModuleIndex), _CamIndex)}", "Raw", rawName);
                     string csvName = $"{frame.FrameIndex}_{time}.csv";
-                    string csvSavePath= Path.Combine(_SaveFolderPath, Enum.GetName(typeof(ModuleIndex), _CamIndex), "csv", csvName);
+                    string csvSavePath= Path.Combine(_SaveFolderPath, $"{_PositionName}_{Enum.GetName(typeof(ModuleIndex), _CamIndex)}", "csv", csvName);
                     int width = frame.Frame.getWidth();
                     int height = frame.Frame.getHeight();
 
