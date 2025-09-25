@@ -77,10 +77,13 @@ namespace PRND_InfraredCapture.Models
         //MainLogic 이벤트
         public Action<int> OnSendCarHeight { get; set; }
 
+        //Camera
+        private readonly SemaphoreSlim _captureGate = new SemaphoreSlim(1, 1);
+        private int _InfraredFrameCount = 80;
+
 
         //내부 사용 변수
         private string _CarNumber = "";
-        private int _InfraredFrameCount = 80; 
         private int _CurrentCarHeight = 0;
         int _LastSentPCResponse = 0;
         int _LastSentLaserWarning = 0;
@@ -1212,41 +1215,32 @@ namespace PRND_InfraredCapture.Models
 
         public async Task StartCaptureImage(ModuleIndex index, float focus, int framecnt, AcquisitionAngle angle, string positionName="")
         {
-
-            var statusMap = new Dictionary<ModuleIndex, int>
-            {
-                { ModuleIndex.Module1, SystemParam.Light1StatusAddress },
-                { ModuleIndex.Module2, SystemParam.Light2StatusAddress },
-                { ModuleIndex.Module3, SystemParam.Light3StatusAddress },
-                { ModuleIndex.Module4, SystemParam.Light4StatusAddress }
-            };
-
-            var triggerMap = new Dictionary<ModuleIndex, int>
-            {
-                { ModuleIndex.Module1, SystemParam.Module1LightOnAddress },
-                { ModuleIndex.Module2, SystemParam.Module2LightOnAddress },
-                { ModuleIndex.Module3, SystemParam.Module3LightOnAddress },
-                { ModuleIndex.Module4, SystemParam.Module4LightOnAddress }
-            };
-
-            int statusAddress = statusMap[index];
-            int triggerAddress = triggerMap[index];
-
+            await _captureGate.WaitAsync().ConfigureAwait(false);
             try
             {
-                if (_CamController != null)
+                int statusAddress = GetLightStatusAddress(index);
+                int triggerAddress = GetLightTriggerAddress(index);
+
+                try
                 {
-                    await CheckLightStatus(index, statusAddress);
-                    _CamController.ReadyCapture(index, focus);
-                    await Task.Delay(1000);
-                    _CamController.CaptureImage(index, framecnt, SystemParam.ImageDataSavePath, angle, positionName);
-                    await TurnOnLight(index, triggerAddress, statusAddress);
+                    if (_CamController != null)
+                    {
+                        await CheckLightStatus(index, statusAddress);
+                        _CamController.ReadyCapture(index, focus);
+                        await Task.Delay(1000);
+                        _CamController.CaptureImage(index, framecnt, SystemParam.ImageDataSavePath, angle, positionName);
+                        await TurnOnLight(index, triggerAddress, statusAddress);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Logger.Instance.Print(Logger.LogLevel.ERROR, $"{Enum.GetName(typeof(ModuleIndex),index)} 카메라 취득 중 오류 발생: {ex.Message}", true);
+                    return;
                 }
             }
-            catch (Exception ex)
+            finally
             {
-                Logger.Instance.Print(Logger.LogLevel.ERROR, $"카메라 취득 중 오류 발생: {ex.Message}", true);
-                return;
+                _captureGate.Release();
             }
         }
 
@@ -1503,6 +1497,30 @@ namespace PRND_InfraredCapture.Models
             // bitIndex: 0~15 (Q시리즈 D는 1워드=16비트)
             int mask = 1 << bitIndex;
             return (wordValue & mask) != 0;
+        }
+
+        private int GetLightStatusAddress(ModuleIndex i)
+        {
+            switch (i)
+            {
+                case ModuleIndex.Module1: return SystemParam.Light1StatusAddress;
+                case ModuleIndex.Module2: return SystemParam.Light2StatusAddress;
+                case ModuleIndex.Module3: return SystemParam.Light3StatusAddress;
+                case ModuleIndex.Module4: return SystemParam.Light4StatusAddress;
+                default: throw new ArgumentOutOfRangeException(nameof(i));
+            }
+        }
+
+        private int GetLightTriggerAddress(ModuleIndex i)
+        {
+            switch (i)
+            {
+                case ModuleIndex.Module1: return SystemParam.Module1LightOnAddress;
+                case ModuleIndex.Module2: return SystemParam.Module2LightOnAddress;
+                case ModuleIndex.Module3: return SystemParam.Module3LightOnAddress;
+                case ModuleIndex.Module4: return SystemParam.Module4LightOnAddress;
+                default: throw new ArgumentOutOfRangeException(nameof(i));
+            }
         }
     }
 }
