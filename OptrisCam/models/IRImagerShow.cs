@@ -52,7 +52,7 @@ namespace CP.OptrisCam.models
 
         public bool IsConnected { get; private set; }
         public bool IsConnectionLost { get; private set; }
-
+        public bool AutoReconnectEnabled { get; set; } = true; // NEW: 자동 재연결 스위치
         public int GrabCount { get; set; } = 0;
 
 
@@ -63,9 +63,18 @@ namespace CP.OptrisCam.models
 
         private CancellationTokenSource _GetThermalDataCts;
         private Task _GetThermalDataTask;
-
         // ===== Debug counters & completion signal =====
         private readonly ManualResetEventSlim _burstDone = new(false); // 80장 수집 완료 신호
+
+        private readonly object _reconnectLock = new object();
+        private CancellationTokenSource _reconnectCts;
+        private Task _reconnectTask;
+        private int _reconnecting = 0; // 0=idle, 1=running
+        private volatile bool _userInitiatedDisconnect = false;
+
+        // === NEW: 이벤트(선택) ===
+        public event Action<ModuleIndex> ConnectionLost;
+        public event Action<ModuleIndex> Reconnected;
 
         /// <summary>Constructor</summary>
         public IRImagerShow(ModuleIndex camIndex, string configPath)
@@ -100,6 +109,20 @@ namespace CP.OptrisCam.models
             _CamIndex = camIndex;
 
         }
+        private void InitImager()
+        {
+            // 기존 인스턴스 정리
+            if (Imager != null)
+            {
+                try { Imager.stopRunning(); } catch { }
+                try { Imager.disconnect(); } catch { }
+            }
+
+
+            // 새 인스턴스 생성 및 클라이언트 등록
+            Imager = IRImagerFactory.getInstance().create("native");
+            Imager.addClient(this);
+        }
 
         /// <summary>Connects to the device specified in the configuration file.</summary>
         /// 
@@ -112,36 +135,44 @@ namespace CP.OptrisCam.models
             // Read the configuration file and initialize the imager with it
             IRImagerConfig config = IRImagerConfigReader.read(_ConfigFilePath);
             Imager.connect(config);
-;
-            _GetThermalDataCts = new CancellationTokenSource();
-            _GetThermalDataTask = Task.Run(() => GetThermalDataAsync(_GetThermalDataCts.Token));
 
+            // 워커 스레드 시작(없으면)
+            if (_GetThermalDataCts == null || _GetThermalDataCts.IsCancellationRequested)
+            {
+                _GetThermalDataCts = new CancellationTokenSource();
+                _GetThermalDataTask = Task.Run(() => GetThermalDataAsync(_GetThermalDataCts.Token));
+            }
             IsConnected = true;
             IsConnectionLost = false;
         }
 
 
         /// <summary>Disconnects from the currently connected device.</summary>
+        /// <summary>수동 해제(자동 재연결 중단)</summary>
         public async void Disconnect()
         {
-            if (IsConnected)
+            _userInitiatedDisconnect = true;
+            StopReconnectLoop();
+
+
+            if (!IsConnected && Imager == null) return;
+
+
+            try
             {
-                try
+                try { Imager.stopRunning(); } catch { }
+                try { Imager.disconnect(); } catch { }
+            }
+            finally
+            {
+                IsConnected = false;
+                IsConnectionLost = false;
+                if (_GetThermalDataCts != null)
                 {
-                    // Stop camera if running
-                    try { Imager.stopRunning(); } catch { /* ignore */ }
-                    Imager.disconnect();
-                }
-                finally
-                {
-                    IsConnected = false;
-                    IsConnectionLost = false;
-                    if (_GetThermalDataCts != null)
-                    {
-                        _GetThermalDataCts.Cancel();
-                        try { await _GetThermalDataTask; } catch { }
-                        _GetThermalDataCts.Dispose();
-                    }
+                    _GetThermalDataCts.Cancel();
+                    try { await _GetThermalDataTask; } catch { }
+                    _GetThermalDataCts.Dispose();
+                    _GetThermalDataCts = null;
                 }
             }
         }
@@ -165,8 +196,8 @@ namespace CP.OptrisCam.models
             // reset state
             _burstDone.Reset();
             _FrameQueue = new ConcurrentQueue<CapturedFrame>();
-            
             Volatile.Write(ref _RemainingFrameCount, frameCount);
+
             CamLogger.Instance.Print(CamLogger.LogLevel.INFO, $"{Enum.GetName(typeof(ModuleIndex), _CamIndex)}Cam Start Capture", true);
             // Start camera acquisition
 
@@ -296,7 +327,7 @@ namespace CP.OptrisCam.models
                     {
                         _burstDone.Reset();            // 다음 버스트를 위해 리셋
                         await Task.Delay(10, token);   // 잠깐 쉼
-                        Imager.stopRunning();
+                        try { Imager.stopRunning(); }catch { }
                         continue;                      // 루프 유지
                     }
                     try
@@ -386,16 +417,99 @@ namespace CP.OptrisCam.models
         // <summary>Called when the connection to the camera is lost and can not be recovered.</summary>
         public override void onConnectionLost()
         {
-         
-            IsConnectionLost = true;
-            CamLogger.Instance.Print(CamLogger.LogLevel.WARN, $"{_CamIndex} Connection Lost", true);
+
+            HandleConnectionLoss("Connection Lost");
         }
 
         // <summary>Called when the SDK has not received frames from the camera for a while.</summary>
         public override void onConnectionTimeout()
         {
+            HandleConnectionLoss("Connection Timeout");
+        }
+
+        private void HandleConnectionLoss(string reason)
+        {
             IsConnectionLost = true;
-            CamLogger.Instance.Print(CamLogger.LogLevel.WARN, $"{Enum.GetName(typeof(ModuleIndex), _CamIndex)}Cam Connection Timeout. Connection Lost",true);
+            IsConnected = false;
+            CamLogger.Instance.Print(CamLogger.LogLevel.WARN, $"{Enum.GetName(typeof(ModuleIndex), _CamIndex)}Cam {reason}. Auto-reconnect: {AutoReconnectEnabled}", true);
+            ConnectionLost?.Invoke(_CamIndex);
+
+
+            if (AutoReconnectEnabled && !_userInitiatedDisconnect)
+                StartReconnectLoop();
+        }
+
+
+        // === NEW: 재연결 루프 ===
+        private void StartReconnectLoop()
+        {
+            if (Interlocked.CompareExchange(ref _reconnecting, 1, 0) != 0) return; // 이미 동작 중
+
+
+            lock (_reconnectLock)
+            {
+                _reconnectCts?.Cancel();
+                _reconnectCts?.Dispose();
+                _reconnectCts = new CancellationTokenSource();
+                _reconnectTask = Task.Run(() => ReconnectLoopAsync(_reconnectCts.Token));
+            }
+        }
+
+
+        private void StopReconnectLoop()
+        {
+            lock (_reconnectLock)
+            {
+                _reconnectCts?.Cancel();
+                _reconnectCts?.Dispose();
+                _reconnectCts = null;
+                _reconnecting = 0;
+            }
+        }
+
+        private async Task ReconnectLoopAsync(CancellationToken token)
+        {
+            int attempt = 0;
+            while (!token.IsCancellationRequested && !_userInitiatedDisconnect)
+            {
+                attempt++;
+                var delayMs = Math.Min(30_000, (int)Math.Pow(2, Math.Min(8, attempt)) * 250); // 250ms → 최대 30s
+
+
+                try
+                {
+                    CamLogger.Instance.Print(CamLogger.LogLevel.INFO, $"{_CamIndex} reconnect attempt #{attempt}", true);
+
+
+                    // 깨끗한 상태에서 재시도
+                    try { Imager.stopRunning(); } catch { }
+                    try { Imager.disconnect(); } catch { }
+                    InitImager();
+
+
+                    var config = IRImagerConfigReader.read(_ConfigFilePath);
+                    Imager.connect(config);
+
+
+                    IsConnected = true;
+                    IsConnectionLost = false;
+                    _reconnecting = 0;
+
+
+                    CamLogger.Instance.Print(CamLogger.LogLevel.INFO, $"{_CamIndex} reconnect SUCCESS", true);
+                    Reconnected?.Invoke(_CamIndex);
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    CamLogger.Instance.Print(CamLogger.LogLevel.WARN, $"{_CamIndex} reconnect failed: {ex.Message}", true);
+                    try { await Task.Delay(delayMs, token); } catch { }
+                }
+            }
+
+
+            // 루프 종료
+            _reconnecting = 0;
         }
     }
 }
