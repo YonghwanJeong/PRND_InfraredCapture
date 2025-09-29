@@ -76,6 +76,9 @@ namespace CP.OptrisCam.models
         public event Action<ModuleIndex> ConnectionLost;
         public event Action<ModuleIndex> Reconnected;
 
+        //외부에서 캡쳐 완료 신호를 확인하는 신호
+        private TaskCompletionSource<bool>? _burstTcs;
+
         /// <summary>Constructor</summary>
         public IRImagerShow(ModuleIndex camIndex, string configPath)
         {
@@ -165,6 +168,9 @@ namespace CP.OptrisCam.models
             }
             finally
             {
+                // 버스트 대기 취소/해제
+                _burstTcs?.TrySetCanceled();
+
                 IsConnected = false;
                 IsConnectionLost = false;
                 if (_GetThermalDataCts != null)
@@ -198,6 +204,9 @@ namespace CP.OptrisCam.models
             _FrameQueue = new ConcurrentQueue<CapturedFrame>();
             Volatile.Write(ref _RemainingFrameCount, frameCount);
 
+            //버스트 완료 대기용 TCS 생성 (동시성 안전하게 새로 생성)
+            _burstTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+
             CamLogger.Instance.Print(CamLogger.LogLevel.INFO, $"{Enum.GetName(typeof(ModuleIndex), _CamIndex)}Cam Start Capture", true);
             // Start camera acquisition
 
@@ -228,6 +237,53 @@ namespace CP.OptrisCam.models
             {
                 return flagState;
             }
+        }
+
+        /// <summary>
+        /// StartImageCapture 호출 이후, 모든 프레임이 디큐/저장되어 버스트가 완전히 종료될 때까지 대기합니다.
+        /// 이미 종료 상태면 즉시 완료합니다.
+        /// </summary>
+        public Task WaitForBurstAsync(CancellationToken token = default)
+        {
+            // 이미 버스트 완료 & 큐 비었으면 즉시 반환
+            if (_burstDone.IsSet && _FrameQueue.IsEmpty && _burstTcs == null)
+                return Task.CompletedTask;
+
+
+            // TCS가 없으면(외부가 직접 호출한 경우 등) 만들어 둠
+            _burstTcs ??= new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+
+            if (token.CanBeCanceled)
+            {
+                // 토큰 취소 시 TCS 취소 연결 (여러 번 등록될 수 있으니 로컬 복사본 사용)
+                var tcs = _burstTcs;
+                var reg = token.Register(() => tcs?.TrySetCanceled(token));
+                // 호출자가 기다리는 동안만 유효: 이어지는 await에서 정리되므로 별도 Dispose는 생략
+            }
+
+
+            return _burstTcs.Task;
+        }
+
+        public async Task<bool> StartImageCaptureAndWaitAsync(int frameCount, string savePath, AcquisitionAngle angle, string positionName = "", CancellationToken token = default)
+        {
+            try
+            {
+                StartImageCapture(frameCount, savePath, angle, positionName);
+                await WaitForBurstAsync(token).ConfigureAwait(false);
+                return true; // 정상 완료
+            }
+            catch (OperationCanceledException)
+            {
+                throw; // 취소는 그대로 상위 전파
+            }
+            catch (Exception)
+            {
+                // 중간 끊김/예외 → false 반환
+                return false;
+            }
+
         }
 
         // Callbacks
@@ -325,6 +381,9 @@ namespace CP.OptrisCam.models
                     // If burst complete AND queue drained -> exit worker loop (optional)
                     if (_burstDone.IsSet && _FrameQueue.IsEmpty)
                     {
+                        // 외부 대기자 깨우기
+                        _burstTcs?.TrySetResult(true);
+
                         _burstDone.Reset();            // 다음 버스트를 위해 리셋
                         await Task.Delay(10, token);   // 잠깐 쉼
                         try { Imager.stopRunning(); }catch { }
