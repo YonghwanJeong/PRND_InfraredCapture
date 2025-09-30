@@ -16,7 +16,7 @@ using static MCProtocol.Mitsubishi;
 
 namespace PRND_InfraredCapture.Models
 {
-    public class ProcessManager
+    public class ProcessManager : IDisposable
     {
         #region Instance 선언
         private static ProcessManager _Instance;
@@ -1521,6 +1521,11 @@ namespace PRND_InfraredCapture.Models
                 case ModuleIndex.Module4: return SystemParam.Module4LightOnAddress;
                 default: throw new ArgumentOutOfRangeException(nameof(i));
             }
+        }
+
+        public void Dispose()
+        {
+            _ = StopOnline();
         }
     }
 }

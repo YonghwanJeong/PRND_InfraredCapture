@@ -1,5 +1,6 @@
 ﻿using CommunityToolkit.Mvvm.DependencyInjection;
 using CP.Common.Util;
+using PRND_InfraredCapture.Models;
 using System;
 using System.Collections.Generic;
 using System.Configuration;
@@ -47,6 +48,7 @@ namespace PRND_InfraredCapture
 
         protected override void OnExit(ExitEventArgs e)
         {
+            ProcessManager.Instance.Dispose();
             timeEndPeriod(1);
             base.OnExit(e);
             // IServiceProvider Dispose 호출

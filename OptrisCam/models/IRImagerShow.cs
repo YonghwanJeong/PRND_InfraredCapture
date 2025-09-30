@@ -139,6 +139,7 @@ namespace CP.OptrisCam.models
             IRImagerConfig config = IRImagerConfigReader.read(_ConfigFilePath);
             Imager.connect(config);
 
+            _userInitiatedDisconnect = false; // 새 세션 시작: 사용자 종료 아님
             // 워커 스레드 시작(없으면)
             if (_GetThermalDataCts == null || _GetThermalDataCts.IsCancellationRequested)
             {
@@ -490,12 +491,15 @@ namespace CP.OptrisCam.models
         {
             IsConnectionLost = true;
             IsConnected = false;
-            CamLogger.Instance.Print(CamLogger.LogLevel.WARN, $"{Enum.GetName(typeof(ModuleIndex), _CamIndex)}Cam {reason}. Auto-reconnect: {AutoReconnectEnabled}", true);
-            ConnectionLost?.Invoke(_CamIndex);
+            CamLogger.Instance.Print(CamLogger.LogLevel.WARN, $"{_CamIndex}Cam {reason}. Auto-reconnect: {AutoReconnectEnabled}, userInitiated={_userInitiatedDisconnect}", true);
 
+            ConnectionLost?.Invoke(_CamIndex);
 
             if (AutoReconnectEnabled && !_userInitiatedDisconnect)
                 StartReconnectLoop();
+            else if (_userInitiatedDisconnect)
+                CamLogger.Instance.Print(CamLogger.LogLevel.INFO,
+                    $"{_CamIndex} skip reconnect because userInitiatedDisconnect==true", true);
         }
 
 
@@ -549,7 +553,7 @@ namespace CP.OptrisCam.models
                     var config = IRImagerConfigReader.read(_ConfigFilePath);
                     Imager.connect(config);
 
-
+                    _userInitiatedDisconnect = false; // 재연결 성공: 사용자 종료 아님
                     IsConnected = true;
                     IsConnectionLost = false;
                     _reconnecting = 0;
