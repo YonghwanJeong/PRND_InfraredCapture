@@ -92,6 +92,7 @@ namespace PRND_InfraredCapture.Models
         //InfraredCam
         public List<string> CamPathList { get; set; } = new List<string>();
         public string ImageDataSavePath { get; set; }
+        public bool IsUsingLight { get; set; } = true;
 
         public List<TCPConnectionPoint> LaserConnectionList { get; set; } = new List<TCPConnectionPoint>();
 

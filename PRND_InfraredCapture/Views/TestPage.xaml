@@ -31,6 +31,9 @@
         </Grid.ColumnDefinitions>
         <StackPanel>
             <Button Content="{Binding OnOfflineBtnText}" Command="{Binding ControlOnOffLineCommand}" />
+            <Button Content="Start Insepction" Command="{Binding InspectionStartCommand}"/>
+            <Button Content="Stop Insepction" Command="{Binding InspectionStopCommand}"/>
+            <CheckBox Content="Is UsingLight" IsChecked="{Binding IsUsingLight}"/>
             <Button Content="LightCurtain Start" Command="{Binding LightCurtainStartCommand}"/>
             <Button Content="LightCurtain Stop" Command="{Binding LightCurtainStopCommand}"/>
             <Button Content="Laser Start" Command="{Binding LaserStartCommand}"/>

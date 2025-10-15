@@ -55,8 +55,23 @@ namespace PRND_InfraredCapture.ViewModels
             set { SetProperty(ref _ConvertTargetPath, value); }
         }
 
+        private bool _IsUsingLight;
+        public bool IsUsingLight
+        {
+            get { return _IsUsingLight; }
+            set 
+            {
+                if (SetProperty(ref _IsUsingLight, value))
+                {
+                    _ProcessManager.SystemParam.IsUsingLight = value;
+                }
+            }
+        }
+
         //public ICommand TestCommand { get; set; }
         public ICommand ControlOnOffLineCommand { get; set; }
+        public ICommand InspectionStartCommand { get; set; }
+        public ICommand InspectionStopCommand { get; set; }
         public ICommand CaptureImageCommand { get; set; }
         public ICommand GetLaserDistanceCommand { get; set; }
         public ICommand PageLoadedCommmand { get; set; }
@@ -78,6 +93,8 @@ namespace PRND_InfraredCapture.ViewModels
             Title = "Home";
             OnOfflineBtnText = "Start Online";
             ControlOnOffLineCommand = new RelayCommand(OnControlOnOfflineCommand);
+            InspectionStartCommand = new RelayCommand(OnInspectionStartCommand);
+            InspectionStopCommand = new RelayCommand(OnInspectionStopCommand);
             CaptureImageCommand = new RelayCommand<object>(OnCaptureImageCommand);
             GetLaserDistanceCommand = new RelayCommand<object>(OnGetLaserDistanceCommand);
             PageLoadedCommmand = new RelayCommand(OnPageLoaded);
@@ -86,9 +103,13 @@ namespace PRND_InfraredCapture.ViewModels
             LaserStartCommand = new RelayCommand(OnLaserStartCommand);
             LaserStopCommand = new RelayCommand(OnLaserStopCommand);
             ConvertRawToBitmapCommand = new RelayCommand(OnConvertRawToBitmapCommand);
+
+
+            IsUsingLight = _ProcessManager.SystemParam.IsUsingLight;
             if (_IsFirstLoaded) Initialize();
             ChaningEvent();
         }
+
 
         private void OnConvertRawToBitmapCommand()
         {
@@ -161,8 +182,18 @@ namespace PRND_InfraredCapture.ViewModels
                 OnOfflineBtnText = "Start Online";
                 Logger.Instance.Print(Logger.LogLevel.INFO, "Change to Offline Mode");
             }
-
         }
+
+        private void OnInspectionStartCommand()
+        {
+            _ProcessManager.StartInspectionSequence("Test");
+        }
+        private void OnInspectionStopCommand()
+        {
+            _ProcessManager.StopInsepction();
+        }
+
+
         private void OnStartLightCurtain()
         {
             _ProcessManager.StartLightCurtain();

@@ -332,8 +332,8 @@ namespace CP.OptrisCam.models
                     string imageSavePath = Path.Combine(_SaveFolderPath, $"{_PositionName}_{Enum.GetName(typeof(ModuleIndex), _CamIndex)}","Image", imageName);
                     string rawName = $"{frame.FrameIndex}_{time}.raw";
                     string rawSavePath = Path.Combine(_SaveFolderPath, $"{_PositionName}_{Enum.GetName(typeof(ModuleIndex), _CamIndex)}", "Raw", rawName);
-                    string csvName = $"{frame.FrameIndex}_{time}.csv";
-                    string csvSavePath= Path.Combine(_SaveFolderPath, $"{_PositionName}_{Enum.GetName(typeof(ModuleIndex), _CamIndex)}", "csv", csvName);
+                    //string csvName = $"{frame.FrameIndex}_{time}.csv";
+                    //string csvSavePath= Path.Combine(_SaveFolderPath, $"{_PositionName}_{Enum.GetName(typeof(ModuleIndex), _CamIndex)}", "csv", csvName);
                     int width = frame.Frame.getWidth();
                     int height = frame.Frame.getHeight();
 
@@ -348,7 +348,8 @@ namespace CP.OptrisCam.models
                     for (int i = 0; i < data.Length; i++)
                         temperature[i] = converter.toTemperature(data[i]);
 
-                    SaveTemperatureCsv(csvSavePath, temperature, width, height);
+                    //Save as CSV
+                    //SaveTemperatureCsv(csvSavePath, temperature, width, height);
 
                     var rotated = ThermalRotate.RotateTemperature(temperature, width, height, (int)_AcquisitionAngle);
                     SaveAsRawFloatBigEndian(rawSavePath, rotated);

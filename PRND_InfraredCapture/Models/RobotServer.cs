@@ -106,7 +106,7 @@ namespace PRND_InfraredCapture.Models
                     }
 
                     _sessions[robotIndex] = session;
-                    Logger.Instance.Print(Logger.LogLevel.INFO, $"{Enum.GetName(typeof(RobotIndex),robotIndex)}  connected from {ip}", true);
+                    Logger.Instance.Print(Logger.LogLevel.INFO, $"{Enum.GetName(typeof(RobotIndex), robotIndex)}  connected from {ip}", true);
 
                     try
                     {

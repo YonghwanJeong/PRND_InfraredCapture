@@ -31,12 +31,16 @@ namespace PRND_InfraredCapture.Models
             RobotIndex = robotIndex;
             _client = client;
             _ns = client.GetStream();
+            //var s = _client.Client;
+            //s.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.KeepAlive, true);
+
         }
 
         public async Task RunAsync()
         {
             var reader = Task.Run(ReadLoopAsync);
             var writer = Task.Run(WriteLoopAsync);
+            var heartbeat = Task.Run(HeartbeatLoopAsync); // 추가
 
             await Task.WhenAny(reader, writer).ConfigureAwait(false);
             _cts.Cancel();
@@ -55,7 +59,7 @@ namespace PRND_InfraredCapture.Models
             return Task.CompletedTask;
         }
 
-        public async Task<string> WaitForMessageAsync(Func<string, bool> predicate, TimeSpan timeout,CancellationToken externalCt)
+        public async Task<string> WaitForMessageAsync(Func<string, bool> predicate, TimeSpan timeout, CancellationToken externalCt)
         {
             // 1) 타임아웃 전용 CTS
             using (var timeoutCts = new CancellationTokenSource(timeout))
@@ -141,6 +145,29 @@ namespace PRND_InfraredCapture.Models
                 Logger.Instance.Print(Logger.LogLevel.WARN, $"[{Enum.GetName(typeof(RobotIndex), RobotIndex)} ReadLoop stop: {ex.Message}", true);
             }
         }
+        private async Task HeartbeatLoopAsync()
+        {
+            try
+            {
+                while (!_cts.IsCancellationRequested)
+                {
+                    // 5초마다 heartbeat 전송
+                    await Task.Delay(TimeSpan.FromSeconds(5), _cts.Token).ConfigureAwait(false);
+
+                    string heartbeatMsg = "9999";
+                    await SendLineAsync(heartbeatMsg, _cts.Token).ConfigureAwait(false);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // 정상 종료
+            }
+            catch (Exception ex)
+            {
+                Logger.Instance.Print(Logger.LogLevel.WARN,
+                    $"[{Enum.GetName(typeof(RobotIndex), RobotIndex)}] HeartbeatLoop stop: {ex.Message}", true);
+            }
+        }
 
         private async Task WriteLoopAsync()
         {
@@ -156,6 +183,7 @@ namespace PRND_InfraredCapture.Models
                         var data = Encoding.ASCII.GetBytes(line + NewLine);
                         await _ns.WriteAsync(data, 0, data.Length, _cts.Token).ConfigureAwait(false);
                         await _ns.FlushAsync(_cts.Token).ConfigureAwait(false);
+                        Logger.Instance.Print(Logger.LogLevel.INFO, $"{Enum.GetName(typeof(RobotIndex), RobotIndex)}_{line}");
                     }
                 }
             }
