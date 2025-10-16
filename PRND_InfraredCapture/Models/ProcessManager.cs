@@ -175,8 +175,7 @@ namespace PRND_InfraredCapture.Models
 
         private void _Laser_WarningStateChanged(ModuleIndex index, bool arg2)
         {
-            //PLC 로직 구성 필요
-            _ = SetLaserWarningBit((int)index, arg2);
+           _ = SetLaserWarningBit((int)index, arg2);
         }
 
         public async Task StopOnline()
@@ -440,7 +439,7 @@ namespace PRND_InfraredCapture.Models
                 bool lightOnAck = await WaitForWordBitAsync(PlcDeviceType.D, SystemParam.PLCStatusAddress, (int)PLCStatusCommand.TurnTableLightOn, true, _ackTimeout, _poll, token, "START_ACK").ConfigureAwait(false);
                 if (!lightOnAck)
                     Logger.Instance.Print(Logger.LogLevel.INFO, $"턴테이블 조명 응답 없음", true);
-
+                await Task.Delay(3000);
 
                 //Step1
                 string currentStep = "Step1";
@@ -569,7 +568,7 @@ namespace PRND_InfraredCapture.Models
 
                         await Task.Delay(_AfterMovingDelay);
 
-                        await StartCaptureImage(currentIndex, camFocus, _InfraredFrameCount, acquisitionAngle, $"{carNumber}_Rear_1");
+                        await StartCaptureImage(currentIndex, camFocus, _InfraredFrameCount, acquisitionAngle, carNumber, "Rear_1");
                         Logger.Instance.Print(Logger.LogLevel.INFO, $"{currentStep} {currentIndexString}_{carNumber}__Rear_1 열화상 이미지 촬영 시작", true);
                         //await Task.Delay(_CaptureDelay);
                         await Task.Delay(3000);
@@ -582,7 +581,7 @@ namespace PRND_InfraredCapture.Models
 
                         await Task.Delay(_AfterMovingDelay);
 
-                        await StartCaptureImage(currentIndex, camFocus, _InfraredFrameCount, acquisitionAngle, $"{carNumber}_Rear_2");
+                        await StartCaptureImage(currentIndex, camFocus, _InfraredFrameCount, acquisitionAngle, carNumber,"Rear_2");
                         Logger.Instance.Print(Logger.LogLevel.INFO, $"{currentStep} {currentIndexString}_{carNumber}__Rear_2 열화상 이미지 촬영 시작", true);
                         await Task.Delay(_CaptureDelay);
 
@@ -640,8 +639,8 @@ namespace PRND_InfraredCapture.Models
                                       homeReceiveCheckingString: "2,3,0",
                                       firstRobotCommand: "5004",
                                       homeRobotCommand: "5005",
-                                      firstInfraredPositionName: "Right4",
-                                      secondInfraredPositionName: "Right3",
+                                      firstInfraredPositionName: "Left4",
+                                      secondInfraredPositionName: "Left3",
                                       token: token));
 
 
@@ -764,7 +763,7 @@ namespace PRND_InfraredCapture.Models
 
                 await Task.Delay(_AfterMovingDelay);
 
-                await StartCaptureImage(currentIndex, camFocus, _InfraredFrameCount, acquisitionAngle, $"{carNumber}_{firstInfraredPositionName}");
+                await StartCaptureImage(currentIndex, camFocus, _InfraredFrameCount, acquisitionAngle, carNumber,$"{firstInfraredPositionName}");
                 Logger.Instance.Print(Logger.LogLevel.INFO, $"{currentStep} {currentIndexString}_{carNumber}_{firstInfraredPositionName} 열화상 이미지 촬영 시작", true);
                 //await Task.Delay(1000);
 
@@ -778,7 +777,7 @@ namespace PRND_InfraredCapture.Models
 
                 await Task.Delay(_AfterMovingDelay);
 
-                await StartCaptureImage(currentIndex, camFocus, _InfraredFrameCount, AcquisitionAngle.Angle_0, $"{carNumber}_{secondInfraredPositionName}");
+                await StartCaptureImage(currentIndex, camFocus, _InfraredFrameCount, AcquisitionAngle.Angle_0, carNumber,$"{secondInfraredPositionName}");
                 Logger.Instance.Print(Logger.LogLevel.INFO, $"{currentStep} {currentIndexString}_{carNumber}_{secondInfraredPositionName} 열화상 이미지 촬영 시작", true);
                 //await Task.Delay(1000);
 
@@ -866,7 +865,7 @@ namespace PRND_InfraredCapture.Models
                 await Task.Delay(3000);
 
 
-                await StartCaptureImage(currentIndex, camFocus, _InfraredFrameCount, acquisitionAngle, $"{carNumber}_{firstInfraredPositionName}");
+                await StartCaptureImage(currentIndex, camFocus, _InfraredFrameCount, acquisitionAngle, carNumber, $"{firstInfraredPositionName}");
                 Logger.Instance.Print(Logger.LogLevel.INFO, $"{currentStep} {currentIndexString}_{carNumber}_{firstInfraredPositionName} 열화상 이미지 촬영 시작", true);
                 //await Task.Delay(1000);
                 await Task.Delay(_CaptureDelay);
@@ -876,7 +875,7 @@ namespace PRND_InfraredCapture.Models
                 if (!robotTCPReceiveOK)
                     Logger.Instance.Print(Logger.LogLevel.ERROR, $"{currentIndexString} 로봇 하강 이동 응답 없음", true);
 
-                await StartCaptureImage(currentIndex, camFocus, _InfraredFrameCount, acquisitionAngle, $"{carNumber}_{secondInfraredPositionName}");
+                await StartCaptureImage(currentIndex, camFocus, _InfraredFrameCount, acquisitionAngle, carNumber, $"{secondInfraredPositionName}");
                 Logger.Instance.Print(Logger.LogLevel.INFO, $"{currentStep} {currentIndexString}_{carNumber}_{secondInfraredPositionName} 열화상 이미지 촬영 시작", true);
                 //await Task.Delay(1000);
                 await Task.Delay(_CaptureDelay);
@@ -1069,10 +1068,10 @@ namespace PRND_InfraredCapture.Models
 
             var res = await laser.CaptureMinAvgAsync(
                   frames: 10,
-                  window: 5,
+                  window: 30,
                   roiStart: null,
                   roiEnd: null,
-                  stride: 1,
+                  stride: 2,
                   ignoreZero: false
             ).ConfigureAwait(false);
 
@@ -1187,7 +1186,7 @@ namespace PRND_InfraredCapture.Models
             }
         }
 
-        public async Task StartCaptureImage(ModuleIndex index, float focus, int framecnt, AcquisitionAngle angle, string positionName = "")
+        public async Task StartCaptureImage(ModuleIndex index, float focus, int framecnt, AcquisitionAngle angle, string carNumber, string positionName)
         {
             await _captureGate.WaitAsync().ConfigureAwait(false);
             try
@@ -1202,7 +1201,7 @@ namespace PRND_InfraredCapture.Models
                         await CheckLightStatus(index, statusAddress);
                         _CamController.ReadyCapture(index, focus);
                         await Task.Delay(1000);
-                        _CamController.CaptureImage(index, framecnt, SystemParam.ImageDataSavePath, angle, positionName);
+                        _CamController.CaptureImage(index, framecnt, SystemParam.ImageDataSavePath, angle, carNumber, positionName);
                         if(SystemParam.IsUsingLight)
                             await TurnOnLight(index, triggerAddress, statusAddress);
                         await Task.Delay(1000);
@@ -1220,6 +1219,47 @@ namespace PRND_InfraredCapture.Models
             }
         }
 
+        public async Task<bool> StartCaptureImageWithAsync(ModuleIndex index, float focus,int framecnt, AcquisitionAngle angle,string carNumber, string positionName)
+        {
+            await _captureGate.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                int statusAddress = GetLightStatusAddress(index);
+                int triggerAddress = GetLightTriggerAddress(index);
+
+                bool isSuccess = false; // 기본값: 실패
+
+                try
+                {
+                    if (_CamController != null)
+                    {
+                        await CheckLightStatus(index, statusAddress).ConfigureAwait(false);
+                        _CamController.ReadyCapture(index, focus);
+                        await Task.Delay(1000).ConfigureAwait(false);
+
+                        if (SystemParam.IsUsingLight)
+                            await TurnOnLight(index, triggerAddress, statusAddress).ConfigureAwait(false);
+
+                        // 실제 캡처 결과 저장
+                        isSuccess = await _CamController
+                            .CaptureImageWithAsync(index, framecnt, SystemParam.ImageDataSavePath, angle, carNumber, positionName)
+                            .ConfigureAwait(false);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Logger.Instance.Print(Logger.LogLevel.ERROR,
+                        $"{Enum.GetName(typeof(ModuleIndex), index)} 카메라 취득 중 오류 발생: {ex.Message}", true);
+                    isSuccess = false;
+                }
+
+                return isSuccess; // 성공/실패 반환
+            }
+            finally
+            {
+                _captureGate.Release();
+            }
+        }
         public void StartCaptureWithoutLightCheck(ModuleIndex index, float focus, int framecnt, AcquisitionAngle angle, string positionName = "")
         {
             try
@@ -1228,7 +1268,7 @@ namespace PRND_InfraredCapture.Models
                 {
                     _CamController.ReadyCapture(index, focus);
                     Task.Delay(1000).Wait();
-                    _CamController.CaptureImage(index, framecnt, SystemParam.ImageDataSavePath, angle);
+                    _CamController.CaptureImage(index, framecnt, SystemParam.ImageDataSavePath, angle,"NoCarNumber","NoPosition");
                 }
             }
             catch (Exception ex)
@@ -1287,7 +1327,7 @@ namespace PRND_InfraredCapture.Models
             try
             {
                 for (int i = 0; i < SystemParam.CamPathList.Count; i++)
-                    _ = StartCaptureImage((ModuleIndex)i, 100, 240, AcquisitionAngle.Angle_0);
+                    _ = StartCaptureImage((ModuleIndex)i, 100, 240, AcquisitionAngle.Angle_0,"NoCarNumber", "NoPositionName");
             }
             catch (Exception ex)
             {

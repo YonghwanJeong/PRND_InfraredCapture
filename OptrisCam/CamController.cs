@@ -56,10 +56,27 @@ namespace CP.OptrisCam
                 CamLogger.Instance.Print(CamLogger.LogLevel.INFO, $"{Enum.GetName(typeof(ModuleIndex), index)} Cam Ready Capture");
             }
         }
-        public void CaptureImage(ModuleIndex index, int framecnt, string savePath,  AcquisitionAngle angle, string positionName = "")
+        public void CaptureImage(ModuleIndex index, int framecnt, string savePath,  AcquisitionAngle angle, string carNumber, string positionName)
         {
             if (_OptrisCams[(int)index].IsConnected)
-                _OptrisCams[(int)index].StartImageCapture(framecnt, savePath, angle, positionName);
+                _OptrisCams[(int)index].StartImageCapture(framecnt, savePath, angle, carNumber, positionName);
+        }
+
+        public async Task<bool> CaptureImageWithAsync(ModuleIndex index, int framecnt, string savePath, AcquisitionAngle angle, string carNumber, string positionName)
+        {
+            try
+            {
+                if (_OptrisCams[(int)index].IsConnected)
+                {
+                    bool isSuccess = await _OptrisCams[(int)index].StartImageCaptureAndWaitAsync(framecnt, savePath, angle, carNumber, positionName).ConfigureAwait(false);
+                    return isSuccess;
+                }
+            }
+            catch(Exception ex)
+            {
+                CamLogger.Instance.Print(CamLogger.LogLevel.ERROR, $"{Enum.GetName(typeof(ModuleIndex), index)} CamCapture Error",true);
+            }
+            return false;
         }
         public void Disconnect(ModuleIndex camIndex)
         {

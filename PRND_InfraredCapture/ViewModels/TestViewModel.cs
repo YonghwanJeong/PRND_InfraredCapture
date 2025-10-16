@@ -40,6 +40,13 @@ namespace PRND_InfraredCapture.ViewModels
         }
 
 
+        private string _CarNumber;
+        public string CarNumber
+        {
+            get { return _CarNumber; }
+            set { SetProperty(ref _CarNumber, value); }
+        }
+
         private string _RawSourcePath;
         public string RawSourcePath
         {
@@ -186,7 +193,7 @@ namespace PRND_InfraredCapture.ViewModels
 
         private void OnInspectionStartCommand()
         {
-            _ProcessManager.StartInspectionSequence("Test");
+            _ProcessManager.StartInspectionSequence(CarNumber);
         }
         private void OnInspectionStopCommand()
         {
@@ -215,10 +222,13 @@ namespace PRND_InfraredCapture.ViewModels
             _ProcessManager.StopAllLaserScan();
         }
 
-        private void OnCaptureImageCommand(object obj)
+        private async void OnCaptureImageCommand(object obj)
         {
             int index = Convert.ToInt32(obj);
-            _ProcessManager.StartCaptureWithoutLightCheck((ModuleIndex)index, (float)70.5,80,CP.OptrisCam.models.AcquisitionAngle.Angle_0);
+            //_ProcessManager.StartCaptureWithoutLightCheck((ModuleIndex)index, (float)70.5,80,CP.OptrisCam.models.AcquisitionAngle.Angle_0);
+            //await _ProcessManager.StartCaptureImage((ModuleIndex)index, (float)70.5, 80, CP.OptrisCam.models.AcquisitionAngle.Angle_0, CarNumber,"");
+            bool isSuccess = await _ProcessManager.StartCaptureImageWithAsync((ModuleIndex)index, (float)70.5, 80, CP.OptrisCam.models.AcquisitionAngle.Angle_0, CarNumber, "");
+            Logger.Instance.Print(Logger.LogLevel.INFO, $"이미지 취득 성공 여부 : {isSuccess}", true);
         }
         private void OnGetLaserDistanceCommand(object obj)
         {

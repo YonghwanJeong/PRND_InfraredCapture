@@ -44,6 +44,7 @@ namespace CP.OptrisCam.models
         private string flagState = "";
         private string _ConfigFilePath;
         private string _SaveFolderPath = "";
+        private string _CarNumber = "";
         private string _PositionName = "";
         private AcquisitionAngle _AcquisitionAngle = AcquisitionAngle.Angle_0;
         private ModuleIndex _CamIndex;
@@ -59,6 +60,7 @@ namespace CP.OptrisCam.models
         //80프레임을 얻기 위한 변수
         private ConcurrentQueue<CapturedFrame> _FrameQueue = new ConcurrentQueue<CapturedFrame>();
         private int _RemainingFrameCount = 0;
+        private int _CapturedFrameCount = 0; // 저장 완료된 프레임 수
 
 
         private CancellationTokenSource _GetThermalDataCts;
@@ -192,14 +194,16 @@ namespace CP.OptrisCam.models
             Imager.setFocusMotorPosition((float)70.5);
         }
 
-        public void StartImageCapture(int frameCount, string savePath, AcquisitionAngle angle, string positionName = "")
+        public void StartImageCapture(int frameCount, string savePath, AcquisitionAngle angle, string carNumber, string positionName)
         {
             if (!IsConnected)
                 return;
 
             _SaveFolderPath = savePath;
+            _CarNumber = carNumber;
             _PositionName = positionName;
             _FrameCount = frameCount;
+            _CapturedFrameCount = 0; //
             // reset state
             _burstDone.Reset();
             _FrameQueue = new ConcurrentQueue<CapturedFrame>();
@@ -267,11 +271,11 @@ namespace CP.OptrisCam.models
             return _burstTcs.Task;
         }
 
-        public async Task<bool> StartImageCaptureAndWaitAsync(int frameCount, string savePath, AcquisitionAngle angle, string positionName = "", CancellationToken token = default)
+        public async Task<bool> StartImageCaptureAndWaitAsync(int frameCount, string savePath, AcquisitionAngle angle, string carNumber, string positionName, CancellationToken token = default)
         {
             try
             {
-                StartImageCapture(frameCount, savePath, angle, positionName);
+                StartImageCapture(frameCount, savePath, angle, carNumber, positionName);
                 await WaitForBurstAsync(token).ConfigureAwait(false);
                 return true; // 정상 완료
             }
@@ -294,30 +298,37 @@ namespace CP.OptrisCam.models
         /// <param name="meta">data of the thermal frame.</param>
         public override void onThermalFrame(ThermalFrame thermal, FrameMetadata meta)
         {
-
-            // Burst logic
-            int before = Volatile.Read(ref _RemainingFrameCount);
-            if (before > 0)
+            try
             {
-                // Enqueue only while we still need frames
-                var cloned = thermal.clone();
-                _FrameQueue.Enqueue(new CapturedFrame
+                // Burst logic
+                int before = Volatile.Read(ref _RemainingFrameCount);
+                if (before > 0)
                 {
-                    FrameIndex = _FrameCount - before,
-                    Frame = cloned,
-                    Meta = meta,
-                    Timestamp = DateTime.Now
-                });
+                    // Enqueue only while we still need frames
+                    var cloned = thermal.clone();
+                    _FrameQueue.Enqueue(new CapturedFrame
+                    {
+                        FrameIndex = _FrameCount - before,
+                        Frame = cloned,
+                        Meta = meta,
+                        Timestamp = DateTime.Now
+                    });
 
-                // Count this frame toward the target
-                int after = Interlocked.Decrement(ref _RemainingFrameCount);
+                    // Count this frame toward the target
+                    int after = Interlocked.Decrement(ref _RemainingFrameCount);
 
-                // If we've reached the target, stop the camera and signal completion
-                if (after == 0)
-                {
-                    _burstDone.Set();
-                    CamLogger.Instance.Print(CamLogger.LogLevel.INFO, $"{Enum.GetName(typeof(ModuleIndex), _CamIndex)}Cam Capture Done ({_FrameCount}Frame)", true);
+                    // If we've reached the target, stop the camera and signal completion
+                    if (after == 0)
+                    {
+                        _burstDone.Set();
+                        CamLogger.Instance.Print(CamLogger.LogLevel.INFO, $"{Enum.GetName(typeof(ModuleIndex), _CamIndex)}Cam Capture Done ({_FrameCount}Frame)", true);
+                    }
                 }
+            }
+            catch(Exception ex)
+            {
+                CamLogger.Instance.Print(CamLogger.LogLevel.WARN, $"{Enum.GetName(typeof(ModuleIndex), _CamIndex)} 카메라로 부터 데이터 받는 중 에러", true);
+
             }
         }
         private async Task GetThermalDataAsync(CancellationToken token)
@@ -326,57 +337,70 @@ namespace CP.OptrisCam.models
             {
                 if (_FrameQueue.TryDequeue(out var frame))
                 {
+                    try
+                    {
+                        string time = $"{frame.Timestamp:yyyy-MM-dd-HH-mm-ss-fff}";
+                        string imageName = $"{frame.FrameIndex}_{time}.bmp";
+                        string imageSavePath = Path.Combine(_SaveFolderPath, $"{_CarNumber}_Image", $"{_PositionName}_{Enum.GetName(typeof(ModuleIndex), _CamIndex)}", imageName);
+                        string rawName = $"{frame.FrameIndex}_{time}.raw";
 
-                    string time = $"{frame.Timestamp:yyyy-MM-dd-HH-mm-ss-fff}";
-                    string imageName = $"{frame.FrameIndex}_{time}.bmp";
-                    string imageSavePath = Path.Combine(_SaveFolderPath, $"{_PositionName}_{Enum.GetName(typeof(ModuleIndex), _CamIndex)}","Image", imageName);
-                    string rawName = $"{frame.FrameIndex}_{time}.raw";
-                    string rawSavePath = Path.Combine(_SaveFolderPath, $"{_PositionName}_{Enum.GetName(typeof(ModuleIndex), _CamIndex)}", "Raw", rawName);
-                    //string csvName = $"{frame.FrameIndex}_{time}.csv";
-                    //string csvSavePath= Path.Combine(_SaveFolderPath, $"{_PositionName}_{Enum.GetName(typeof(ModuleIndex), _CamIndex)}", "csv", csvName);
-                    int width = frame.Frame.getWidth();
-                    int height = frame.Frame.getHeight();
+                        //임시
+                        //string rawSavePath = Path.Combine(_SaveFolderPath, _CarNumber, $"{_PositionName}_{Enum.GetName(typeof(ModuleIndex), _CamIndex)}", "Raw", rawName);
+                        string rawSavePath = Path.Combine(_SaveFolderPath, $"{_CarNumber}_Raw", $"{_PositionName}_{Enum.GetName(typeof(ModuleIndex), _CamIndex)}", rawName);
 
-                    ////온도 정보
-                    TemperatureConverter converter = new TemperatureConverter();
-                    converter.setPrecision(frame.Frame.getTemperaturePrecision());
+                        //string csvName = $"{frame.FrameIndex}_{time}.csv";
+                        //string csvSavePath= Path.Combine(_SaveFolderPath, $"{_PositionName}_{Enum.GetName(typeof(ModuleIndex), _CamIndex)}", "csv", csvName);
 
-                    ushort[] data = new ushort[frame.Frame.getSize()];
-                    frame.Frame.copyDataTo(data, data.Length);
+                        int width = frame.Frame.getWidth();
+                        int height = frame.Frame.getHeight();
 
-                    float[] temperature = new float[data.Length];
-                    for (int i = 0; i < data.Length; i++)
-                        temperature[i] = converter.toTemperature(data[i]);
+                        ////온도 정보
+                        TemperatureConverter converter = new TemperatureConverter();
+                        converter.setPrecision(frame.Frame.getTemperaturePrecision());
 
-                    //Save as CSV
-                    //SaveTemperatureCsv(csvSavePath, temperature, width, height);
+                        ushort[] data = new ushort[frame.Frame.getSize()];
+                        frame.Frame.copyDataTo(data, data.Length);
 
-                    var rotated = ThermalRotate.RotateTemperature(temperature, width, height, (int)_AcquisitionAngle);
-                    SaveAsRawFloatBigEndian(rawSavePath, rotated);
+                        float[] temperature = new float[data.Length];
+                        for (int i = 0; i < data.Length; i++)
+                            temperature[i] = converter.toTemperature(data[i]);
+
+                        //Save as CSV
+                        //SaveTemperatureCsv(csvSavePath, temperature, width, height);
+
+                        //Save Raw
+                        var rotated = ThermalRotate.RotateTemperature(temperature, width, height, (int)_AcquisitionAngle);
+                        SaveAsRawFloatBigEndian(rawSavePath, rotated);
 
 
-                    // Process & save (example: BMP)
-                    imageBuilder.setThermalFrame(frame.Frame);
-                    imageBuilder.convertTemperatureToPaletteImage();
+                        // Process & save (example: BMP)
+                        imageBuilder.setThermalFrame(frame.Frame);
+                        imageBuilder.convertTemperatureToPaletteImage();
 
-                    byte[] image = new byte[imageBuilder.getImageSizeInBytes()];
-                    imageBuilder.copyImageDataTo(image, image.Length);
-                    
-                    using var bitmap = new Bitmap(width, height, System.Drawing.Imaging.PixelFormat.Format24bppRgb);
-                    var rectangle = new System.Drawing.Rectangle(0, 0, width, height);
-                    var bitmapData = bitmap.LockBits(rectangle, ImageLockMode.ReadWrite, bitmap.PixelFormat);
-                    System.Runtime.InteropServices.Marshal.Copy(image, 0, bitmapData.Scan0, image.Length);
-                    bitmap.UnlockBits(bitmapData);
+                        byte[] image = new byte[imageBuilder.getImageSizeInBytes()];
+                        imageBuilder.copyImageDataTo(image, image.Length);
 
-                    if(_AcquisitionAngle == AcquisitionAngle.Angle_90)
-                        bitmap.RotateFlip(RotateFlipType.Rotate90FlipNone);
-                    else if(_AcquisitionAngle == AcquisitionAngle.Angle_180)
-                        bitmap.RotateFlip(RotateFlipType.Rotate180FlipNone);
-                    else if(_AcquisitionAngle == AcquisitionAngle.Angle_270)
-                        bitmap.RotateFlip(RotateFlipType.Rotate270FlipNone);
+                        using var bitmap = new Bitmap(width, height, System.Drawing.Imaging.PixelFormat.Format24bppRgb);
+                        var rectangle = new System.Drawing.Rectangle(0, 0, width, height);
+                        var bitmapData = bitmap.LockBits(rectangle, ImageLockMode.ReadWrite, bitmap.PixelFormat);
+                        System.Runtime.InteropServices.Marshal.Copy(image, 0, bitmapData.Scan0, image.Length);
+                        bitmap.UnlockBits(bitmapData);
 
-                    Directory.CreateDirectory(Path.GetDirectoryName(imageSavePath)!);
-                    bitmap.Save(imageSavePath, ImageFormat.Bmp);
+                        if (_AcquisitionAngle == AcquisitionAngle.Angle_90)
+                            bitmap.RotateFlip(RotateFlipType.Rotate90FlipNone);
+                        else if (_AcquisitionAngle == AcquisitionAngle.Angle_180)
+                            bitmap.RotateFlip(RotateFlipType.Rotate180FlipNone);
+                        else if (_AcquisitionAngle == AcquisitionAngle.Angle_270)
+                            bitmap.RotateFlip(RotateFlipType.Rotate270FlipNone);
+
+                        Directory.CreateDirectory(Path.GetDirectoryName(imageSavePath)!);
+                        bitmap.Save(imageSavePath, ImageFormat.Bmp);
+                    }
+                    catch(Exception ex)
+                    {
+                        CamLogger.Instance.Print(CamLogger.LogLevel.WARN, $"{Enum.GetName(typeof(ModuleIndex), _CamIndex)} 데이터 저장 중 에러", true);
+
+                    }
                 }
                 else
                 {
