@@ -568,8 +568,8 @@ namespace PRND_InfraredCapture.Models
 
                         await Task.Delay(_AfterMovingDelay);
 
-                        await StartCaptureImage(currentIndex, camFocus, _InfraredFrameCount, acquisitionAngle, carNumber, "Rear_1");
-                        Logger.Instance.Print(Logger.LogLevel.INFO, $"{currentStep} {currentIndexString}_{carNumber}__Rear_1 열화상 이미지 촬영 시작", true);
+                        await StartCaptureImage(currentIndex, camFocus, _InfraredFrameCount, acquisitionAngle, carNumber, "Rear1");
+                        Logger.Instance.Print(Logger.LogLevel.INFO, $"{currentStep} {currentIndexString}_{carNumber}_Rear1 열화상 이미지 촬영 시작", true);
                         //await Task.Delay(_CaptureDelay);
                         await Task.Delay(3000);
 
@@ -581,7 +581,7 @@ namespace PRND_InfraredCapture.Models
 
                         await Task.Delay(_AfterMovingDelay);
 
-                        await StartCaptureImage(currentIndex, camFocus, _InfraredFrameCount, acquisitionAngle, carNumber,"Rear_2");
+                        await StartCaptureImage(currentIndex, camFocus, _InfraredFrameCount, acquisitionAngle, carNumber,"Rear2");
                         Logger.Instance.Print(Logger.LogLevel.INFO, $"{currentStep} {currentIndexString}_{carNumber}__Rear_2 열화상 이미지 촬영 시작", true);
                         await Task.Delay(_CaptureDelay);
 
@@ -659,8 +659,8 @@ namespace PRND_InfraredCapture.Models
                                       homeRobotCommand: "5004",
                                       firstRobotCommand: "5002",
                                       secondRobotCommand: "5003",
-                                      firstInfraredPositionName: "Rear_Top_1",
-                                      secondInfraredPositionName: "Rear_Top_2",
+                                      firstInfraredPositionName: "TopRear_1",
+                                      secondInfraredPositionName: "TopRear_2",
                                       token: token));
 
                 //4번 로봇 이동
@@ -678,8 +678,8 @@ namespace PRND_InfraredCapture.Models
                                       homeRobotCommand: "5004",
                                       firstRobotCommand: "5002",
                                       secondRobotCommand: "5003",
-                                      firstInfraredPositionName: "Front_Top_1",
-                                      secondInfraredPositionName: "Front_Top_2",
+                                      firstInfraredPositionName: "TopFront_1",
+                                      secondInfraredPositionName: "TopFront_2",
                                       token: token));
 
                 await Task.WhenAll(step2RobotMoveTasks).ConfigureAwait(false);
