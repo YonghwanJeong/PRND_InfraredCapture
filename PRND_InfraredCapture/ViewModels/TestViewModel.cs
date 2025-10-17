@@ -78,6 +78,8 @@ namespace PRND_InfraredCapture.ViewModels
         //public ICommand TestCommand { get; set; }
         public ICommand ControlOnOffLineCommand { get; set; }
         public ICommand InspectionStartCommand { get; set; }
+        public ICommand InspectionStartCommandType2 { get; set; }
+
         public ICommand InspectionStopCommand { get; set; }
         public ICommand CaptureImageCommand { get; set; }
         public ICommand GetLaserDistanceCommand { get; set; }
@@ -101,6 +103,7 @@ namespace PRND_InfraredCapture.ViewModels
             OnOfflineBtnText = "Start Online";
             ControlOnOffLineCommand = new RelayCommand(OnControlOnOfflineCommand);
             InspectionStartCommand = new RelayCommand(OnInspectionStartCommand);
+            InspectionStartCommandType2 = new RelayCommand(OnInspectionStartType2Command);
             InspectionStopCommand = new RelayCommand(OnInspectionStopCommand);
             CaptureImageCommand = new RelayCommand<object>(OnCaptureImageCommand);
             GetLaserDistanceCommand = new RelayCommand<object>(OnGetLaserDistanceCommand);
@@ -118,12 +121,80 @@ namespace PRND_InfraredCapture.ViewModels
         }
 
 
-        private void OnConvertRawToBitmapCommand()
+        public void ProcessAllSubfolders(string rootFolder, int width, int height)
         {
+            // 하위 폴더 탐색
+            var subFolders = Directory.GetDirectories(rootFolder);
+            if (subFolders.Length == 0)
+            {
+                Logger.Instance.Print(Logger.LogLevel.WARN, $"하위 폴더가 없습니다: {rootFolder}", true);
+                return;
+            }
 
+            foreach (var subFolder in subFolders)
+            {
+                try
+                {
+                    var filePaths = Directory.GetFiles(subFolder, "*.raw")
+                                             .OrderBy(p => Path.GetFileNameWithoutExtension(p))
+                                             .ToList();
+
+                    if (filePaths.Count == 0)
+                    {
+                        Logger.Instance.Print(Logger.LogLevel.WARN, $"RAW 파일 없음: {subFolder}", true);
+                        continue;
+                    }
+
+                    string folderName = Path.GetFileName(subFolder.TrimEnd(Path.DirectorySeparatorChar));
+                    string outputFolder = Path.Combine(rootFolder, $"{folderName}_Image");
+
+                    Directory.CreateDirectory(outputFolder);
+                    //Directory.CreateDirectory(Path.Combine(outputFolder, "DiffImage"));
+                    //Directory.CreateDirectory(Path.Combine(outputFolder, "Image"));
+
+                    Logger.Instance.Print(Logger.LogLevel.INFO, $"폴더 처리 시작: {folderName}", true);
+
+                    //단순 이미지 변환 (필요시 주석 해제)
+                    /*
+                    int idx = 0;
+                    foreach (var filePath in filePaths)
+                    {
+                        var data = ThermalImageUtil.BuildGrayscaleBitmapFromFloatRaw(filePath, width, height);
+                        string imagepath = Path.Combine(outputFolder, "Image", $"{idx}.png");
+                        data.Save(imagepath, ImageFormat.Png);
+                        idx++;
+                    }
+                    */
+
+                    // 차이미지 변환
+                    float diffMax = 0f;
+                    float maxdiffIndex = 0;
+                    for (int i = 0; i < filePaths.Count; i++)
+                    {
+                        float diff = 0;
+                        var data = ThermalImageUtil.BuildDiffGray8FromFloatRaw(filePaths[i], filePaths[0], width, height, 0, 10, ref diff);
+                        if (diff > diffMax)
+                        {
+                            diffMax = diff;
+                            maxdiffIndex = i;
+                        }
+                        string imagepath = Path.Combine(outputFolder, $"{Path.GetFileNameWithoutExtension(filePaths[i])}.png");
+                        data.Save(imagepath, ImageFormat.Png);
+                    }
+
+                    Logger.Instance.Print(Logger.LogLevel.INFO, $"[{folderName}] Max Diff Index : {maxdiffIndex}, Max Diff Span : {diffMax}", true);
+                }
+                catch (Exception ex)
+                {
+                    Logger.Instance.Print(Logger.LogLevel.ERROR, $"폴더 처리 중 오류: {subFolder} → {ex.Message}", true);
+                }
+            }
+        }
+        private void ConvertRawToBitmap()
+        {
             var filePaths = Directory.GetFiles(RawSourcePath, "*.raw")
-                             .OrderBy(p => Path.GetFileNameWithoutExtension(p))
-                             .ToList();
+                            .OrderBy(p => Path.GetFileNameWithoutExtension(p))
+                            .ToList();
 
             int width = 382;
             int height = 288;
@@ -142,17 +213,30 @@ namespace PRND_InfraredCapture.ViewModels
 
             //차이미지 반환
             float diffMax = 0f;
+            int maxDiffIndex = 0;
+
             foreach (var filePath in filePaths)
             {
-                float diff =0;
-                var data = ThermalImageUtil.BuildDiffGray8FromFloatRaw(filePath, filePaths[0], width, height,0,10, ref diff);
-                if (diff > diffMax) diffMax = diff;
+
+                float diff = 0;
+                var data = ThermalImageUtil.BuildDiffGray8FromFloatRaw(filePath, filePaths[0], width, height, 0, 10, ref diff);
+                if (diff > diffMax)
+                {
+                    diffMax = diff;
+                    maxDiffIndex = i;
+                }
                 string imagepath = Path.Combine(ConvertTargetPath, "DiffImage", $"{Path.GetFileNameWithoutExtension(filePath)}.png");
                 Directory.CreateDirectory(Path.GetDirectoryName(imagepath));
                 data.Save(imagepath, ImageFormat.Png);
                 i++;
             }
-            Logger.Instance.Print(Logger.LogLevel.INFO, $"Max Diff Span : {diffMax}", true);
+            Logger.Instance.Print(Logger.LogLevel.INFO, $"Max Diff Inex : {maxDiffIndex}, Max Diff Span : {diffMax}", true);
+        }
+        private void OnConvertRawToBitmapCommand()
+        {
+            int width = 382;
+            int height = 288;
+            ProcessAllSubfolders(RawSourcePath, width, height);
         }
 
         public void ChaningEvent()
@@ -195,6 +279,12 @@ namespace PRND_InfraredCapture.ViewModels
         {
             _ProcessManager.StartInspectionSequence(CarNumber);
         }
+
+        private void OnInspectionStartType2Command()
+        {
+            _ProcessManager.StartInspectionSequenceType2(CarNumber);
+        }
+
         private void OnInspectionStopCommand()
         {
             _ProcessManager.StopInsepction();
@@ -265,7 +355,6 @@ namespace PRND_InfraredCapture.ViewModels
 
         private void OnPageLoaded()
         {
-            TestImage = BitmapController.LoadBitmapImage(@"C:\Users\jijon\Work\2. Development\PRND_InfraredCapture\PRND_InfraredCapture\Resources\CustomAir_Cylinder.bmp");
         }
 
 

@@ -175,7 +175,7 @@ namespace PRND_InfraredCapture.Models
 
         private void _Laser_WarningStateChanged(ModuleIndex index, bool arg2)
         {
-           _ = SetLaserWarningBit((int)index, arg2);
+            _ = SetLaserWarningBit((int)index, arg2);
         }
 
         public async Task StopOnline()
@@ -326,8 +326,27 @@ namespace PRND_InfraredCapture.Models
             }
             _CarNumber = carNumber;
             _MainLogicCts = new CancellationTokenSource();
-            _MainLogicTask = RunningMainLogicTask(carNumber, _MainLogicCts.Token);
-            //_MainLogicTask = CommTestTask(carNumber, _MainLogicCts.Token);
+            //_MainLogicTask = RunningMainLogicTask(carNumber, _MainLogicCts.Token);
+            _MainLogicTask = RunningMainLogicTaskSequential_1(carNumber, _MainLogicCts.Token);
+
+        }
+
+        public void StartInspectionSequenceType2(string carNumber)
+        {
+            if (!IsOnlineMode)
+            {
+                Logger.Instance.Print(Logger.LogLevel.INFO, "Online 모드가 아닙니다.", true);
+                return;
+            }
+            if (_IsInspectionRunning)
+            {
+                Logger.Instance.Print(Logger.LogLevel.INFO, "이미 Sequence가 시작 중입니다.", true);
+                return;
+            }
+            _CarNumber = carNumber;
+            _MainLogicCts = new CancellationTokenSource();
+            //_MainLogicTask = RunningMainLogicTask(carNumber, _MainLogicCts.Token);
+            _MainLogicTask = RunningMainLogicTaskSequential_2(carNumber, _MainLogicCts.Token);
 
         }
 
@@ -355,11 +374,11 @@ namespace PRND_InfraredCapture.Models
 
                     }
                     //AutoModeCheck
-                    else if(_PLCCommandEdgeDetector.IsRisingEdge((BitIndex)PLCStatusCommand.AutoMode))
+                    else if (_PLCCommandEdgeDetector.IsRisingEdge((BitIndex)PLCStatusCommand.AutoMode))
                     {
                         _IsPLCAutoMode = true;
                     }
-                    else if(_PLCCommandEdgeDetector.IsFallingEdge((BitIndex)PLCStatusCommand.AutoMode))
+                    else if (_PLCCommandEdgeDetector.IsFallingEdge((BitIndex)PLCStatusCommand.AutoMode))
                     {
                         _IsPLCAutoMode = false;
                     }
@@ -398,12 +417,916 @@ namespace PRND_InfraredCapture.Models
                 }
             }
         }
+        private async Task RunningMainLogicTaskSequential_1(string carNumber, CancellationToken token)
+        {
+            try
+            {
+                if (!_IsPLCAutoMode)
+                {
+                    Logger.Instance.Print(Logger.LogLevel.WARN, "PLC가 AutoMode가 아닙니다.", true);
+                    return;
+                }
+
+                if (_IsInspectionRunning)
+                {
+                    Logger.Instance.Print(Logger.LogLevel.WARN, "이미 Sequence가 시작 중입니다.", true);
+                    return;
+                }
+                _IsInspectionRunning = true;
+
+                Logger.Instance.Print(Logger.LogLevel.INFO, $"{carNumber} 차량 검사 시퀀스 시작", true);
+
+
+                await SetPCResponseBit((int)PCCommand.StartInspection, true); //검사 시작 On
+                                                                              // 2) PLC -> PC : 특정 워드의 특정 비트가 ON 될 때까지 폴링
+                bool ResponseAck = await WaitForWordBitAsync(PlcDeviceType.D, SystemParam.PLCStatusAddress, (int)PLCStatusCommand.ResponseOK, true, _ackTimeout, _poll, token, "START_ACK").ConfigureAwait(false);
+                if (!ResponseAck)
+                {
+                    Logger.Instance.Print(Logger.LogLevel.INFO, $"PLC 응답 없음", true);
+                    _IsInspectionRunning = false;
+                    return;
+                }
+                await SetPCResponseBit((int)PCCommand.StartInspection, false); //검사 시작 Off
+
+
+                //차량 높이 정보 업데이트
+                _CurrentCarHeight = _LightCurtain.Stop();
+                OnSendCarHeight?.Invoke(_CurrentCarHeight);
+
+                //턴테이블 조명 ON 확인
+                bool lightOnAck = await WaitForWordBitAsync(PlcDeviceType.D, SystemParam.PLCStatusAddress, (int)PLCStatusCommand.TurnTableLightOn, true, _ackTimeout, _poll, token, "START_ACK").ConfigureAwait(false);
+                if (!lightOnAck)
+                    Logger.Instance.Print(Logger.LogLevel.INFO, $"턴테이블 조명 응답 없음", true);
+                await Task.Delay(3000);
+
+
+                //Step1
+                string currentStep = "Step1";
+                int robotTeachedPosition = 0;
+                int distanceOffset = 700;
+                int camFocus = 70;
+                AcquisitionAngle acquisitionAngle = AcquisitionAngle.Angle_0;
+
+
+                var step1InitialPositionMoveTask = new List<Task>();
+
+                step1InitialPositionMoveTask.Add(
+                    Task.Run(async () =>{ await MoveRobotTeachedPosition(ModuleIndex.Module1, robotTeachedPosition, token).ConfigureAwait(false); })
+                    );
+                //로봇 1 이동
+                await Task.Delay(250);
+                step1InitialPositionMoveTask.Add(
+                    Task.Run(async () => { await MoveRobotTeachedPosition(ModuleIndex.Module2, robotTeachedPosition, token).ConfigureAwait(false); })
+                    );
+                await Task.Delay(250);
+
+                step1InitialPositionMoveTask.Add(
+                    Task.Run(async () => { await MoveRobotTeachedPosition(ModuleIndex.Module3, robotTeachedPosition, token).ConfigureAwait(false); })
+                    );
+                await Task.Delay(250);
+
+                step1InitialPositionMoveTask.Add(
+                    Task.Run(async () => { await MoveRobotTeachedPosition(ModuleIndex.Module4, robotTeachedPosition, token).ConfigureAwait(false); })
+                    );
+
+                await Task.WhenAll(step1InitialPositionMoveTask);
+
+
+                await Task.Delay(_AfterMovingDelay);
+
+                //1, 3번 로봇 이동
+                var step1FirstRobotMoveTask = new List<Task>()
+                {
+                    Task.Run(async() =>
+                    {
+                        //로봇 1 거리센서 측정 후 이미지 취득
+                        ModuleIndex currentIndex = ModuleIndex.Module1;
+                        string currentIndexString = Enum.GetName(typeof(ModuleIndex), currentIndex);
+                        string firstReceiveCheckString = "1,1,1";
+                        string secondReceiveCheckingString = "1,1,2";
+                        string firstCamPositionName = "Right2";
+                        string secondCamPositionName = "Right1";
+                        string firstRobotCommand = "5000";
+                        double distance = 0;
+                        double moveDistance = 0;
+                        string robotMessage = "";
+                        bool robotTCPReceiveOK = false;
+                        
+                        
+                        //거리센서 측정
+                        Logger.Instance.Print(Logger.LogLevel.INFO, $"{currentStep} {currentIndexString} 거리센서 측정", true);
+                        distance = await GetDistanceByLaserAsync(currentIndex, token).ConfigureAwait(false);
+                        moveDistance = distance - distanceOffset;
+                        if (moveDistance < 0) moveDistance = 0;
+                        if (moveDistance > 1999) moveDistance = 1999;
+
+                        //Robot 전진이동 TCP 신호 전송, 대기
+                        robotMessage = $"{moveDistance}";
+                        robotTCPReceiveOK = await ResilientSendAndExpectAsync((int)currentIndex, robotMessage, firstReceiveCheckString, _doneTimeout, TimeSpan.FromSeconds(3), 5, ct: token).ConfigureAwait(false);
+                        if (!robotTCPReceiveOK)
+                            Logger.Instance.Print(Logger.LogLevel.ERROR, $"{currentIndexString} 로봇  전진 이동 응답 없음", true);
+                        await Task.Delay(_AfterMovingDelay);
+
+                        distance = await GetDistanceByLaserAsync(currentIndex, token).ConfigureAwait(false);
+                        Logger.Instance.Print(Logger.LogLevel.INFO, $"{currentStep} {currentIndexString} 전진 후 거리센서 측정: {distance}mm", true);
+                        Logger.Instance.Print(Logger.LogLevel.INFO, $"{currentStep} {currentIndexString}_{carNumber}_{firstCamPositionName} 열화상 이미지 촬영 시작", true);
+                        await StartCaptureImage(currentIndex, camFocus, _InfraredFrameCount, acquisitionAngle, carNumber, $"{firstCamPositionName}");
+
+
+                        //로봇에 수평이동 TCP 신호 전송, 대기
+                        robotTCPReceiveOK = await ResilientSendAndExpectAsync((int)currentIndex, firstRobotCommand, secondReceiveCheckingString, _doneTimeout, TimeSpan.FromSeconds(3), 5, ct: token).ConfigureAwait(false);
+                        if (!robotTCPReceiveOK)
+                            Logger.Instance.Print(Logger.LogLevel.ERROR, $"{currentIndexString} 로봇 수평 이동 응답 없음", true);
+
+                        await Task.Delay(_AfterMovingDelay);
+
+
+                        Logger.Instance.Print(Logger.LogLevel.INFO, $"{currentStep} {currentIndexString}_{carNumber}_{secondCamPositionName} 열화상 이미지 촬영 시작", true);
+                        await StartCaptureImage(currentIndex, camFocus, _InfraredFrameCount, AcquisitionAngle.Angle_0, carNumber, $"{secondCamPositionName}");
+
+                    }),
+                    Task.Run(async() =>
+                    {
+                        //로봇 3 거리센서 측정 후 이미지 취득
+                        ModuleIndex currentIndex = ModuleIndex.Module3;
+                        string currentIndexString = Enum.GetName(typeof(ModuleIndex), currentIndex);
+                        string firstReceiveCheckString = "1,3,1";
+                        string secondReceiveCheckingString = "1,3,2";
+                        string firstCamPositionName = "Left5";
+                        string secondCamPositionName = "Left6";
+                        string firstRobotCommand = "5000";
+                        double distance = 0;
+                        double moveDistance = 0;
+                        string robotMessage = "";
+                        bool robotTCPReceiveOK = false;
+                        
+                        
+                        //거리센서 측정
+                        Logger.Instance.Print(Logger.LogLevel.INFO, $"{currentStep} {currentIndexString} 거리센서 측정", true);
+                        distance = await GetDistanceByLaserAsync(currentIndex, token).ConfigureAwait(false);
+                        moveDistance = distance - distanceOffset;
+                        if (moveDistance < 0) moveDistance = 0;
+                        if (moveDistance > 1999) moveDistance = 1999;
+
+                        //Robot 전진이동 TCP 신호 전송, 대기
+                        robotMessage = $"{moveDistance}";
+                        robotTCPReceiveOK = await ResilientSendAndExpectAsync((int)currentIndex, robotMessage, firstReceiveCheckString, _doneTimeout, TimeSpan.FromSeconds(3), 5, ct: token).ConfigureAwait(false);
+                        if (!robotTCPReceiveOK)
+                            Logger.Instance.Print(Logger.LogLevel.ERROR, $"{currentIndexString} 로봇  전진 이동 응답 없음", true);
+                        await Task.Delay(_AfterMovingDelay);
+
+                        distance = await GetDistanceByLaserAsync(currentIndex, token).ConfigureAwait(false);
+                        Logger.Instance.Print(Logger.LogLevel.INFO, $"{currentStep} {currentIndexString} 전진 후 거리센서 측정: {distance}mm", true);
+                        Logger.Instance.Print(Logger.LogLevel.INFO, $"{currentStep} {currentIndexString}_{carNumber}_{firstCamPositionName} 열화상 이미지 촬영 시작", true);
+                        await StartCaptureImage(currentIndex, camFocus, _InfraredFrameCount, acquisitionAngle, carNumber, $"{firstCamPositionName}");
+
+
+                        //로봇에 수평이동 TCP 신호 전송, 대기
+                        robotTCPReceiveOK = await ResilientSendAndExpectAsync((int)currentIndex, firstRobotCommand, secondReceiveCheckingString, _doneTimeout, TimeSpan.FromSeconds(3), 5, ct: token).ConfigureAwait(false);
+                        if (!robotTCPReceiveOK)
+                            Logger.Instance.Print(Logger.LogLevel.ERROR, $"{currentIndexString} 로봇 수평 이동 응답 없음", true);
+
+                        await Task.Delay(_AfterMovingDelay);
+
+
+                        Logger.Instance.Print(Logger.LogLevel.INFO, $"{currentStep} {currentIndexString}_{carNumber}_{secondCamPositionName} 열화상 이미지 촬영 시작", true);
+                        await StartCaptureImage(currentIndex, camFocus, _InfraredFrameCount, AcquisitionAngle.Angle_0, carNumber, $"{secondCamPositionName}");
+                    })
+
+                };
+                await Task.WhenAll(step1FirstRobotMoveTask);
+
+
+                // 2, 4번 로봇 이동
+                var step1SecondRobotMoveTask = new List<Task>()
+                {
+                    Task.Run(async() =>
+                    {
+                        //로봇 2 거리센서 측정 후 이미지 취득
+                        ModuleIndex currentIndex = ModuleIndex.Module2;
+                        string currentIndexString = Enum.GetName(typeof(ModuleIndex), currentIndex);
+                        string firstReceiveCheckString = "1,2,1";
+                        string secondReceiveCheckingString = "1,2,2";
+                        string firstCamPositionName = "Right5";
+                        string secondCamPositionName = "Right6";
+                        string firstRobotCommand = "5000";
+                        double distance = 0;
+                        double moveDistance = 0;
+                        string robotMessage = "";
+                        bool robotTCPReceiveOK = false;
+                        
+                        
+                        //거리센서 측정
+                        Logger.Instance.Print(Logger.LogLevel.INFO, $"{currentStep} {currentIndexString} 거리센서 측정", true);
+                        distance = await GetDistanceByLaserAsync(currentIndex, token).ConfigureAwait(false);
+                        moveDistance = distance - distanceOffset;
+                        if (moveDistance < 0) moveDistance = 0;
+                        if (moveDistance > 1999) moveDistance = 1999;
+
+                        //Robot 전진이동 TCP 신호 전송, 대기
+                        robotMessage = $"{moveDistance}";
+                        robotTCPReceiveOK = await ResilientSendAndExpectAsync((int)currentIndex, robotMessage, firstReceiveCheckString, _doneTimeout, TimeSpan.FromSeconds(3), 5, ct: token).ConfigureAwait(false);
+                        if (!robotTCPReceiveOK)
+                            Logger.Instance.Print(Logger.LogLevel.ERROR, $"{currentIndexString} 로봇  전진 이동 응답 없음", true);
+                        await Task.Delay(_AfterMovingDelay);
+
+                        distance = await GetDistanceByLaserAsync(currentIndex, token).ConfigureAwait(false);
+                        Logger.Instance.Print(Logger.LogLevel.INFO, $"{currentStep} {currentIndexString} 전진 후 거리센서 측정: {distance}mm", true);
+                        Logger.Instance.Print(Logger.LogLevel.INFO, $"{currentStep} {currentIndexString}_{carNumber}_{firstCamPositionName} 열화상 이미지 촬영 시작", true);
+                        await StartCaptureImage(currentIndex, camFocus, _InfraredFrameCount, acquisitionAngle, carNumber, $"{firstCamPositionName}");
+
+
+                        //로봇에 수평이동 TCP 신호 전송, 대기
+                        robotTCPReceiveOK = await ResilientSendAndExpectAsync((int)currentIndex, firstRobotCommand, secondReceiveCheckingString, _doneTimeout, TimeSpan.FromSeconds(3), 5, ct: token).ConfigureAwait(false);
+                        if (!robotTCPReceiveOK)
+                            Logger.Instance.Print(Logger.LogLevel.ERROR, $"{currentIndexString} 로봇 수평 이동 응답 없음", true);
+
+                        await Task.Delay(_AfterMovingDelay);
+
+
+                        Logger.Instance.Print(Logger.LogLevel.INFO, $"{currentStep} {currentIndexString}_{carNumber}_{secondCamPositionName} 열화상 이미지 촬영 시작", true);
+                        await StartCaptureImage(currentIndex, camFocus, _InfraredFrameCount, AcquisitionAngle.Angle_0, carNumber, $"{secondCamPositionName}");
+
+                    }),
+                    Task.Run(async() =>
+                    {
+                        //로봇 4 거리센서 측정 후 이미지 취득
+                        ModuleIndex currentIndex = ModuleIndex.Module4;
+                        string currentIndexString = Enum.GetName(typeof(ModuleIndex), currentIndex);
+                        string firstReceiveCheckString = "1,4,1";
+                        string secondReceiveCheckingString = "1,4,2";
+                        string firstCamPositionName = "Left2";
+                        string secondCamPositionName = "Left1";
+                        string firstRobotCommand = "5000";
+                        double distance = 0;
+                        double moveDistance = 0;
+                        string robotMessage = "";
+                        bool robotTCPReceiveOK = false;
+                        
+                        
+                        //거리센서 측정
+                        Logger.Instance.Print(Logger.LogLevel.INFO, $"{currentStep} {currentIndexString} 거리센서 측정", true);
+                        distance = await GetDistanceByLaserAsync(currentIndex, token).ConfigureAwait(false);
+                        moveDistance = distance - distanceOffset;
+                        if (moveDistance < 0) moveDistance = 0;
+                        if (moveDistance > 1999) moveDistance = 1999;
+
+                        //Robot 전진이동 TCP 신호 전송, 대기
+                        robotMessage = $"{moveDistance}";
+                        robotTCPReceiveOK = await ResilientSendAndExpectAsync((int)currentIndex, robotMessage, firstReceiveCheckString, _doneTimeout, TimeSpan.FromSeconds(3), 5, ct: token).ConfigureAwait(false);
+                        if (!robotTCPReceiveOK)
+                            Logger.Instance.Print(Logger.LogLevel.ERROR, $"{currentIndexString} 로봇  전진 이동 응답 없음", true);
+                        await Task.Delay(_AfterMovingDelay);
+
+                        distance = await GetDistanceByLaserAsync(currentIndex, token).ConfigureAwait(false);
+                        Logger.Instance.Print(Logger.LogLevel.INFO, $"{currentStep} {currentIndexString} 전진 후 거리센서 측정: {distance}mm", true);
+                        Logger.Instance.Print(Logger.LogLevel.INFO, $"{currentStep} {currentIndexString}_{carNumber}_{firstCamPositionName} 열화상 이미지 촬영 시작", true);
+                        await StartCaptureImage(currentIndex, camFocus, _InfraredFrameCount, acquisitionAngle, carNumber, $"{firstCamPositionName}");
+
+
+                        //로봇에 수평이동 TCP 신호 전송, 대기
+                        robotTCPReceiveOK = await ResilientSendAndExpectAsync((int)currentIndex, firstRobotCommand, secondReceiveCheckingString, _doneTimeout, TimeSpan.FromSeconds(3), 5, ct: token).ConfigureAwait(false);
+                        if (!robotTCPReceiveOK)
+                            Logger.Instance.Print(Logger.LogLevel.ERROR, $"{currentIndexString} 로봇 수평 이동 응답 없음", true);
+
+                        await Task.Delay(_AfterMovingDelay);
+
+
+                        Logger.Instance.Print(Logger.LogLevel.INFO, $"{currentStep} {currentIndexString}_{carNumber}_{secondCamPositionName} 열화상 이미지 촬영 시작", true);
+                        await StartCaptureImage(currentIndex, camFocus, _InfraredFrameCount, AcquisitionAngle.Angle_0, carNumber, $"{secondCamPositionName}");
+                    })
+
+                };
+                await Task.WhenAll(step1SecondRobotMoveTask);
+
+
+
+                //로봇 전체 원점 복귀
+                var step1ThirdRobotMoveTask = new List<Task>()
+                {
+                    Task.Run(async() =>
+                    {
+                        //로봇 1 원점 복귀
+                        ModuleIndex currentIndex = ModuleIndex.Module1;
+                        string currentIndexString = Enum.GetName(typeof(ModuleIndex), currentIndex);
+                        string homeRobotCommand = "5001";
+                        string homeReceiveCheckingString = "1,1,0";
+                        bool robotTCPReceiveOK = false;
+
+                        robotTCPReceiveOK = await ResilientSendAndExpectAsync((int)currentIndex, homeRobotCommand, homeReceiveCheckingString, _doneTimeout, TimeSpan.FromSeconds(3), 5, ct: token).ConfigureAwait(false);
+                        if (!robotTCPReceiveOK)
+                            Logger.Instance.Print(Logger.LogLevel.ERROR, $"{currentIndexString} 로봇 원점 이동 응답 없음", true);
+
+                    }),
+                    Task.Run(async() =>
+                    {
+                        //로봇 2 원점 복귀
+                        ModuleIndex currentIndex = ModuleIndex.Module2;
+                        string currentIndexString = Enum.GetName(typeof(ModuleIndex), currentIndex);
+                        string homeRobotCommand = "5001";
+                        string homeReceiveCheckingString = "1,2,0";
+                        bool robotTCPReceiveOK = false;
+
+                        robotTCPReceiveOK = await ResilientSendAndExpectAsync((int)currentIndex, homeRobotCommand, homeReceiveCheckingString, _doneTimeout, TimeSpan.FromSeconds(3), 5, ct: token).ConfigureAwait(false);
+                        if (!robotTCPReceiveOK)
+                            Logger.Instance.Print(Logger.LogLevel.ERROR, $"{currentIndexString} 로봇 원점 이동 응답 없음", true);
+                    }),
+                    Task.Run(async() =>
+                    {
+                        //로봇 3 원점 복귀
+                        ModuleIndex currentIndex = ModuleIndex.Module3;
+                        string currentIndexString = Enum.GetName(typeof(ModuleIndex), currentIndex);
+                        string homeRobotCommand = "5001";
+                        string homeReceiveCheckingString = "1,3,0";
+                        bool robotTCPReceiveOK = false;
+
+                        robotTCPReceiveOK = await ResilientSendAndExpectAsync((int)currentIndex, homeRobotCommand, homeReceiveCheckingString, _doneTimeout, TimeSpan.FromSeconds(3), 5, ct: token).ConfigureAwait(false);
+                        if (!robotTCPReceiveOK)
+                            Logger.Instance.Print(Logger.LogLevel.ERROR, $"{currentIndexString} 로봇 원점 이동 응답 없음", true);
+
+                    }),
+                    Task.Run(async() =>
+                    {
+                        //로봇 4 원점 복귀
+                        ModuleIndex currentIndex = ModuleIndex.Module4;
+                        string currentIndexString = Enum.GetName(typeof(ModuleIndex), currentIndex);
+                        string homeRobotCommand = "5001";
+                        string homeReceiveCheckingString = "1,4,0";
+                        bool robotTCPReceiveOK = false;
+
+                        robotTCPReceiveOK = await ResilientSendAndExpectAsync((int)currentIndex, homeRobotCommand, homeReceiveCheckingString, _doneTimeout, TimeSpan.FromSeconds(3), 5, ct: token).ConfigureAwait(false);
+                        if (!robotTCPReceiveOK)
+                            Logger.Instance.Print(Logger.LogLevel.ERROR, $"{currentIndexString} 로봇 원점 이동 응답 없음", true);
+
+                    })
+
+                };
+                await Task.WhenAll(step1ThirdRobotMoveTask);
+
+
+                //Step1 앞 뒤 거리 측정
+                double distanceFront = 0;
+                double distanceRear = 0;
+                var step1FourthRobotMoveTasks = new List<Task>()
+                {
+                    Task.Run(async() =>
+                    {
+                        ModuleIndex currentIndex = ModuleIndex.Module1;
+                        int robotIndex = (int)currentIndex;
+                        string currentIndexString = Enum.GetName(typeof(ModuleIndex), currentIndex);
+                        string homeRobotCommand = "5002";
+                        string homeReceiveCheckingString = "1,1,0";
+
+
+                        await MoveRobotTeachedPosition(currentIndex, 1, token).ConfigureAwait(false);
+
+                        await Task.Delay(_AfterMovingDelay);
+
+                        Logger.Instance.Print(Logger.LogLevel.INFO, $"Step1 차량 전면 거리 측정 시작", true);
+                        distanceFront = await GetDistanceByLaserAsync(currentIndex, token).ConfigureAwait(false);
+                        Logger.Instance.Print(Logger.LogLevel.INFO, $"Front 센서 : {distanceFront}mm", true);
+
+                        //로봇에 원점 이동 명령
+                        var robotTCPReceiveOK = await ResilientSendAndExpectAsync(robotIndex, homeRobotCommand, homeReceiveCheckingString, _doneTimeout, TimeSpan.FromSeconds(3), 5, ct: token).ConfigureAwait(false);
+                        if (!robotTCPReceiveOK)
+                            Logger.Instance.Print(Logger.LogLevel.ERROR, $"{currentIndexString} 로봇 원점 이동 응답 없음", true);
+
+
+                    }),
+                    Task.Run(async() =>
+                    {
+                        ModuleIndex currentIndex = ModuleIndex.Module3;
+                        int robotIndex = (int)currentIndex;
+                        string currentIndexString = Enum.GetName(typeof(ModuleIndex), currentIndex);
+                        string homeRobotCommand = "5003";
+                        string homeReceiveCheckingString = "1,3,0";
+
+                        Logger.Instance.Print(Logger.LogLevel.INFO, $"Step1 차량 후면 거리 측정 시작", true);
+                        await MoveRobotTeachedPosition(currentIndex, 1, token).ConfigureAwait(false);
+
+                        await Task.Delay(_AfterMovingDelay);
+
+                        distanceRear = await GetDistanceByLaserAsync(currentIndex, token).ConfigureAwait(false);
+                        Logger.Instance.Print(Logger.LogLevel.INFO, $"Rear 센서 : {distanceRear}mm ", true);
+                        double moveDistance = distanceRear - 800;
+                        if (moveDistance > 1999) moveDistance = 1999;
+                        string robotMessage = $"{moveDistance}";
+
+                        //로봇에 전진 이동 TCP 신호 전송, 대기
+                        var robotTCPReceiveOK = await ResilientSendAndExpectAsync(robotIndex, robotMessage, "1,3,3", _doneTimeout, TimeSpan.FromSeconds(3), 5, ct: token).ConfigureAwait(false);
+                        if (!robotTCPReceiveOK)
+                            Logger.Instance.Print(Logger.LogLevel.ERROR, $"{currentIndexString} 로봇 전진 이동 응답 없음", true);
+
+                        await Task.Delay(_AfterMovingDelay);
+
+                        await StartCaptureImage(currentIndex, camFocus, _InfraredFrameCount, acquisitionAngle, carNumber, "Rear1");
+                        Logger.Instance.Print(Logger.LogLevel.INFO, $"{currentStep} {currentIndexString}_{carNumber}_Rear1 열화상 이미지 촬영 시작", true);
+                        //await Task.Delay(_CaptureDelay);
+                        await Task.Delay(3000);
+
+
+                       //로봇에 상승 이동 TCP 신호 전송, 대기
+                        robotTCPReceiveOK = await ResilientSendAndExpectAsync(robotIndex, "5002", "1,3,4", _doneTimeout, TimeSpan.FromSeconds(3), 5, ct: token).ConfigureAwait(false);
+                        if (!robotTCPReceiveOK)
+                            Logger.Instance.Print(Logger.LogLevel.ERROR, $"{currentIndexString} 로봇 상승 이동 응답 없음", true);
+
+                        await Task.Delay(_AfterMovingDelay);
+
+                        await StartCaptureImage(currentIndex, camFocus, _InfraredFrameCount, acquisitionAngle, carNumber,"Rear2");
+                        Logger.Instance.Print(Logger.LogLevel.INFO, $"{currentStep} {currentIndexString}_{carNumber}__Rear2 열화상 이미지 촬영 시작", true);
+                        await Task.Delay(_CaptureDelay);
+
+                        //로봇에 원점 이동 명령
+                        robotTCPReceiveOK = await ResilientSendAndExpectAsync(robotIndex, homeRobotCommand, homeReceiveCheckingString, _doneTimeout, TimeSpan.FromSeconds(3), 5, ct: token).ConfigureAwait(false);
+                        if (!robotTCPReceiveOK)
+                            Logger.Instance.Print(Logger.LogLevel.ERROR, $"{currentIndexString} 로봇 원점 이동 응답 없음", true);
+
+                    }),
+                };
+                await Task.WhenAll(step1FourthRobotMoveTasks).ConfigureAwait(false);
+
+
+                //45도 회전 요청
+                await SetPCResponseBit((int)PCCommand.TurnAnlge45, true); // 45도 회전 요청
+                                                                          // 2) PLC -> PC : 특정 워드의 특정 비트가 ON 될 때까지 폴링
+                ResponseAck = await WaitForWordBitAsync(PlcDeviceType.D, SystemParam.PLCStatusAddress, (int)PLCStatusCommand.ResponseOK, true, _ackTimeout, _poll, token, "START_ACK").ConfigureAwait(false);
+                if (!ResponseAck)
+                    Logger.Instance.Print(Logger.LogLevel.INFO, $"PLC 응답 없음", true);
+                await SetPCResponseBit((int)PCCommand.TurnAnlge45, false); //45도 회전 완료 off
+
+
+                bool roatateAck = await WaitForWordBitAsync(PlcDeviceType.D, SystemParam.TurnTableAngleAddress, (int)PCCommand.TurnAnlge45, true, _doneTimeout, _poll, token, "roatateAck").ConfigureAwait(false);
+                if (!roatateAck)
+                    Logger.Instance.Print(Logger.LogLevel.INFO, $"PLC 응답 없음", true);
+                await SetPCResponseBit((int)PCCommand.TurnAnlge45, false);
+
+
+
+
+                //Step2
+                //리어 프론트 값 확인 필요
+                //var step2RobotMoveTasks_1 = new List<Task>();
+
+                //1번 로봇 이동
+            
+                await ExecuteRobotCaptureSequence1Async(currentStep: "Step2", currentIndex: ModuleIndex.Module1,
+                                      robotTeachedPosition: 2,
+                                      carNumber: carNumber, distanceOffset: 700,
+                                      camFocus: (float)70, acquisitionAngle: AcquisitionAngle.Angle_0,
+                                      firstReceiveCheckString: "2,1,1",
+                                      secondReceiveCheckingString: "2,1,2",
+                                      homeReceiveCheckingString: "2,1,0",
+                                      firstRobotCommand: "5003",
+                                      homeRobotCommand: "5004",
+                                      firstInfraredPositionName: "Right3",
+                                      secondInfraredPositionName: "Right4",
+                                      token: token);
+
+
+
+                await ExecuteRobotCaptureSequence1Async(currentStep: "Step2", currentIndex: ModuleIndex.Module3,
+                                      robotTeachedPosition: 2,
+                                      carNumber: carNumber, distanceOffset: 700,
+                                      camFocus: (float)70, acquisitionAngle: AcquisitionAngle.Angle_0,
+                                      firstReceiveCheckString: "2,3,1",
+                                      secondReceiveCheckingString: "2,3,2",
+                                      homeReceiveCheckingString: "2,3,0",
+                                      firstRobotCommand: "5004",
+                                      homeRobotCommand: "5005",
+                                      firstInfraredPositionName: "Left4",
+                                      secondInfraredPositionName: "Left3",
+                                      token: token);
+
+                var step2RobotMoveTasks_2 = new List<Task>();
+
+                //2번 로봇 이동
+                step2RobotMoveTasks_2.Add(ExecuteRobotCaptureSequence2Async(currentStep: "Step2", currentIndex: ModuleIndex.Module2,
+                                      robotTeachedPosition: 1,
+                                      carNumber: carNumber, distanceOffset: 845,
+                                      heightOffset: 800,
+                                      distanceFront: distanceRear,
+                                      camFocus: (float)70, acquisitionAngle: AcquisitionAngle.Angle_0,
+                                      firstReceiveCheckString: "2,2,1",
+                                      secondReceiveCheckString: "2,2,2",
+                                      thirdReceivingCheckString: "2,2,3",
+                                      fourthReceivingCheckString: "2,2,4",
+                                      homeReceiveCheckingString: "2,2,0",
+                                      homeRobotCommand: "5004",
+                                      firstRobotCommand: "5002",
+                                      secondRobotCommand: "5003",
+                                      firstInfraredPositionName: "TopRear1",
+                                      secondInfraredPositionName: "TopRear2",
+                                      token: token));
+
+                //4번 로봇 이동
+                step2RobotMoveTasks_2.Add(ExecuteRobotCaptureSequence2Async(currentStep: "Step2", currentIndex: ModuleIndex.Module4,
+                                      robotTeachedPosition: 1,
+                                      carNumber: carNumber,
+                                      distanceOffset: 755,
+                                      heightOffset: 800, distanceFront: distanceFront,
+                                      camFocus: (float)70, acquisitionAngle: AcquisitionAngle.Angle_0,
+                                      firstReceiveCheckString: "2,4,1",
+                                      secondReceiveCheckString: "2,4,2",
+                                      thirdReceivingCheckString: "2,4,3",
+                                      fourthReceivingCheckString: "2,4,4",
+                                      homeReceiveCheckingString: "2,4,0",
+                                      homeRobotCommand: "5004",
+                                      firstRobotCommand: "5002",
+                                      secondRobotCommand: "5003",
+                                      firstInfraredPositionName: "TopFront1",
+                                      secondInfraredPositionName: "TopFront2",
+                                      token: token));
+                
+                await Task.WhenAll(step2RobotMoveTasks_2).ConfigureAwait(false);
+                Logger.Instance.Print(Logger.LogLevel.INFO, "Step 2 로봇 촬영 완료", true);
+
+
+
+                //180도 회전 요청
+                await SetPCResponseBit((int)PCCommand.TurnAnlge180, true); // 180도 회전 요청
+                                                                           // 2) PLC -> PC : 특정 워드의 특정 비트가 ON 될 때까지 폴링
+                ResponseAck = await WaitForWordBitAsync(PlcDeviceType.D, SystemParam.PLCStatusAddress, (int)PLCStatusCommand.ResponseOK, true, _ackTimeout, _poll, token, "START_ACK").ConfigureAwait(false);
+                if (!ResponseAck)
+                    Logger.Instance.Print(Logger.LogLevel.INFO, $"PLC 응답 없음", true);
+                await SetPCResponseBit((int)PCCommand.TurnAnlge180, false); //45도 회전 완료 off
+
+                roatateAck = await WaitForWordBitAsync(PlcDeviceType.D, SystemParam.TurnTableAngleAddress, (int)PCCommand.TurnAnlge0, true, _doneTimeout, _poll, token, "roatateAck").ConfigureAwait(false);
+                if (!roatateAck)
+                    Logger.Instance.Print(Logger.LogLevel.INFO, $"PLC 응답 없음", true);
+                await SetPCResponseBit((int)PCCommand.TurnAnlge180, false);
+
+                bool isCarExit = await WaitForWordBitAsync(PlcDeviceType.D, SystemParam.PLCStatusAddress, (int)PLCStatusCommand.CarExitSignal, true, _doneTimeout, _poll, token, "CAREXIT_ACK").ConfigureAwait(false);
+                if (!isCarExit)
+                    Logger.Instance.Print(Logger.LogLevel.INFO, $"차량 출차 응답없음", true);
+                await SetPCResponseBit((int)PCCommand.ResponseOK, true);
+
+                Logger.Instance.Print(Logger.LogLevel.INFO, $"{carNumber} 차량 검사 시퀀스 종료", true);
+            }
+
+            catch (TaskCanceledException)
+            {
+                Logger.Instance.Print(Logger.LogLevel.INFO, "중단 요청으로 중단 되었습니다.", true);
+            }
+            catch (Exception ex)
+            {
+                Logger.Instance.Print(Logger.LogLevel.INFO, $"오류로 중단 되었습니다. 예외: {ex.Message}", true);
+            }
+            finally
+            {
+                _IsInspectionRunning = false;
+                _LightCurtain.Start(SystemParam.LightCurtainHeightOffset);
+
+                //_RobotServer.Stop();
+                //await Task.Delay(3000);
+                //if(IsOnlineMode)
+                //    await _RobotServer.StartAsync(); //비동기 시작
+
+            }
+
+        }
+
+
+        private async Task RunningMainLogicTaskSequential_2(string carNumber, CancellationToken token)
+        {
+            try
+            {
+                if (!_IsPLCAutoMode)
+                {
+                    Logger.Instance.Print(Logger.LogLevel.WARN, "PLC가 AutoMode가 아닙니다.", true);
+                    return;
+                }
+
+                if (_IsInspectionRunning)
+                {
+                    Logger.Instance.Print(Logger.LogLevel.WARN, "이미 Sequence가 시작 중입니다.", true);
+                    return;
+                }
+                _IsInspectionRunning = true;
+
+                Logger.Instance.Print(Logger.LogLevel.INFO, $"{carNumber} 차량 검사 시퀀스 시작", true);
+
+
+                await SetPCResponseBit((int)PCCommand.StartInspection, true); //검사 시작 On
+                                                                              // 2) PLC -> PC : 특정 워드의 특정 비트가 ON 될 때까지 폴링
+                bool ResponseAck = await WaitForWordBitAsync(PlcDeviceType.D, SystemParam.PLCStatusAddress, (int)PLCStatusCommand.ResponseOK, true, _ackTimeout, _poll, token, "START_ACK").ConfigureAwait(false);
+                if (!ResponseAck)
+                {
+                    Logger.Instance.Print(Logger.LogLevel.INFO, $"PLC 응답 없음", true);
+                    _IsInspectionRunning = false;
+                    return;
+                }
+                await SetPCResponseBit((int)PCCommand.StartInspection, false); //검사 시작 Off
+
+
+                //차량 높이 정보 업데이트
+                _CurrentCarHeight = _LightCurtain.Stop();
+                OnSendCarHeight?.Invoke(_CurrentCarHeight);
+
+                //턴테이블 조명 ON 확인
+                bool lightOnAck = await WaitForWordBitAsync(PlcDeviceType.D, SystemParam.PLCStatusAddress, (int)PLCStatusCommand.TurnTableLightOn, true, _ackTimeout, _poll, token, "START_ACK").ConfigureAwait(false);
+                if (!lightOnAck)
+                    Logger.Instance.Print(Logger.LogLevel.INFO, $"턴테이블 조명 응답 없음", true);
+                await Task.Delay(3000);
+
+                //Step1
+                string currentStep = "Step1";
+                var step1FirstRobotMoveTasks_1 = new List<Task>();
+
+                //로봇 1 동작
+                step1FirstRobotMoveTasks_1.Add(ExecuteRobotCaptureSequence1Async(currentStep: currentStep, currentIndex: ModuleIndex.Module1,
+                                                  robotTeachedPosition: 0,
+                                                  carNumber: carNumber, distanceOffset: 700,
+                                                  camFocus: (float)70, acquisitionAngle: AcquisitionAngle.Angle_0,
+                                                  firstReceiveCheckString: "1,1,1",
+                                                  secondReceiveCheckingString: "1,1,2",
+                                                  homeReceiveCheckingString: "1,1,0",
+                                                  firstRobotCommand: "5000",
+                                                  homeRobotCommand: "5001",
+                                                  firstInfraredPositionName: "Right2",
+                                                  secondInfraredPositionName: "Right1",
+                                                  token: token));
+                ;
+
+
+                //로봇 2 동작
+                step1FirstRobotMoveTasks_1.Add(ExecuteRobotCaptureSequence1Async(currentStep: currentStep, currentIndex: ModuleIndex.Module2,
+                                                  robotTeachedPosition: 0, carNumber:
+                                                  carNumber, distanceOffset: 700,
+                                                  camFocus: (float)70, acquisitionAngle: AcquisitionAngle.Angle_0,
+                                                  firstReceiveCheckString: "1,2,1",
+                                                  secondReceiveCheckingString: "1,2,2",
+                                                  homeReceiveCheckingString: "1,2,0",
+                                                  firstRobotCommand: "5000",
+                                                  homeRobotCommand: "5001",
+                                                  firstInfraredPositionName: "Right5",
+                                                  secondInfraredPositionName: "Right6",
+                                                  token: token));
+
+
+                await Task.WhenAll(step1FirstRobotMoveTasks_1).ConfigureAwait(false);
+
+                var step1FirstRobotMoveTasks_2 = new List<Task>();
+
+                //로봇 3 동작
+                step1FirstRobotMoveTasks_2.Add(ExecuteRobotCaptureSequence1Async(currentStep: currentStep, currentIndex: ModuleIndex.Module3,
+                                                  robotTeachedPosition: 0, carNumber:
+                                                  carNumber, distanceOffset: 700,
+                                                  camFocus: (float)70, acquisitionAngle: AcquisitionAngle.Angle_0,
+                                                  firstReceiveCheckString: "1,3,1",
+                                                  secondReceiveCheckingString: "1,3,2",
+                                                  homeReceiveCheckingString: "1,3,0",
+                                                  firstRobotCommand: "5000",
+                                                  homeRobotCommand: "5001",
+                                                  firstInfraredPositionName: "Left5",
+                                                  secondInfraredPositionName: "Left6",
+                                                  token: token));
+
+                await Task.Delay(_RobotFirstMovingDelay).ConfigureAwait(false);
+                //로봇 4 동작
+                step1FirstRobotMoveTasks_2.Add(ExecuteRobotCaptureSequence1Async(currentStep: currentStep, currentIndex: ModuleIndex.Module4,
+                                                  robotTeachedPosition: 0, carNumber:
+                                                  carNumber, distanceOffset: 700,
+                                                  camFocus: (float)70, acquisitionAngle: AcquisitionAngle.Angle_0,
+                                                  firstReceiveCheckString: "1,4,1",
+                                                  secondReceiveCheckingString: "1,4,2",
+                                                  homeReceiveCheckingString: "1,4,0",
+                                                  firstRobotCommand: "5000",
+                                                  homeRobotCommand: "5001",
+                                                  firstInfraredPositionName: "Left2",
+                                                  secondInfraredPositionName: "Left1",
+                                                  token: token));
+
+
+                Logger.Instance.Print(Logger.LogLevel.INFO, $"Step 1 로봇 측면 촬영 완료", true);
+
+                await Task.WhenAll(step1FirstRobotMoveTasks_2).ConfigureAwait(false);
+
+
+                double distanceFront = 0;
+                double distanceRear = 0;
+                var step1SecondRobotMoveTasks = new List<Task>()
+                {
+                    Task.Run(async() =>
+                    {
+                        ModuleIndex currentIndex = ModuleIndex.Module1;
+                        int robotIndex = (int)currentIndex;
+                        string currentIndexString = Enum.GetName(typeof(ModuleIndex), currentIndex);
+                        string homeRobotCommand = "5002";
+                        string homeReceiveCheckingString = "1,1,0";
+
+
+                        await MoveRobotTeachedPosition(currentIndex, 1, token).ConfigureAwait(false);
+
+                        await Task.Delay(_AfterMovingDelay);
+
+                        Logger.Instance.Print(Logger.LogLevel.INFO, $"Step1 차량 전면 거리 측정 시작", true);
+                        distanceFront = await GetDistanceByLaserAsync(currentIndex, token).ConfigureAwait(false);
+                        Logger.Instance.Print(Logger.LogLevel.INFO, $"Front 센서 : {distanceFront}mm", true);
+
+                        //로봇에 원점 이동 명령
+                        var robotTCPReceiveOK = await ResilientSendAndExpectAsync(robotIndex, homeRobotCommand, homeReceiveCheckingString, _doneTimeout, TimeSpan.FromSeconds(3), 5, ct: token).ConfigureAwait(false);
+                        if (!robotTCPReceiveOK)
+                            Logger.Instance.Print(Logger.LogLevel.ERROR, $"{currentIndexString} 로봇 원점 이동 응답 없음", true);
+
+
+                    }),
+                    Task.Run(async() =>
+                    {
+                        ModuleIndex currentIndex = ModuleIndex.Module3;
+                        int robotIndex = (int)currentIndex;
+                        string currentIndexString = Enum.GetName(typeof(ModuleIndex), currentIndex);
+                        string homeRobotCommand = "5003";
+                        string homeReceiveCheckingString = "1,3,0";
+                        float camFocus = 70;
+                        AcquisitionAngle acquisitionAngle = AcquisitionAngle.Angle_0;
+
+
+                        Logger.Instance.Print(Logger.LogLevel.INFO, $"Step1 차량 후면 거리 측정 시작", true);
+                        await MoveRobotTeachedPosition(currentIndex, 1, token).ConfigureAwait(false);
+
+                        await Task.Delay(_AfterMovingDelay);
+
+                        distanceRear = await GetDistanceByLaserAsync(currentIndex, token).ConfigureAwait(false);
+                        Logger.Instance.Print(Logger.LogLevel.INFO, $"Rear 센서 : {distanceRear}mm ", true);
+                        double moveDistance = distanceRear - 800;
+                        if (moveDistance > 1999) moveDistance = 1999;
+                        string robotMessage = $"{moveDistance}";
+
+                        //로봇에 전진 이동 TCP 신호 전송, 대기
+                        var robotTCPReceiveOK = await ResilientSendAndExpectAsync(robotIndex, robotMessage, "1,3,3", _doneTimeout, TimeSpan.FromSeconds(3), 5, ct: token).ConfigureAwait(false);
+                        if (!robotTCPReceiveOK)
+                            Logger.Instance.Print(Logger.LogLevel.ERROR, $"{currentIndexString} 로봇 전진 이동 응답 없음", true);
+
+                        await Task.Delay(_AfterMovingDelay);
+
+                        await StartCaptureImage(currentIndex, camFocus, _InfraredFrameCount, acquisitionAngle, carNumber, "Rear1");
+                        Logger.Instance.Print(Logger.LogLevel.INFO, $"{currentStep} {currentIndexString}_{carNumber}_Rear1 열화상 이미지 촬영 시작", true);
+                        //await Task.Delay(_CaptureDelay);
+                        await Task.Delay(3000);
+
+
+                       //로봇에 상승 이동 TCP 신호 전송, 대기
+                        robotTCPReceiveOK = await ResilientSendAndExpectAsync(robotIndex, "5002", "1,3,4", _doneTimeout, TimeSpan.FromSeconds(3), 5, ct: token).ConfigureAwait(false);
+                        if (!robotTCPReceiveOK)
+                            Logger.Instance.Print(Logger.LogLevel.ERROR, $"{currentIndexString} 로봇 상승 이동 응답 없음", true);
+
+                        await Task.Delay(_AfterMovingDelay);
+
+                        await StartCaptureImage(currentIndex, camFocus, _InfraredFrameCount, acquisitionAngle, carNumber,"Rear2");
+                        Logger.Instance.Print(Logger.LogLevel.INFO, $"{currentStep} {currentIndexString}_{carNumber}__Rear_2 열화상 이미지 촬영 시작", true);
+                        await Task.Delay(_CaptureDelay);
+
+                        //로봇에 원점 이동 명령
+                        robotTCPReceiveOK = await ResilientSendAndExpectAsync(robotIndex, homeRobotCommand, homeReceiveCheckingString, _doneTimeout, TimeSpan.FromSeconds(3), 5, ct: token).ConfigureAwait(false);
+                        if (!robotTCPReceiveOK)
+                            Logger.Instance.Print(Logger.LogLevel.ERROR, $"{currentIndexString} 로봇 원점 이동 응답 없음", true);
+
+                    }),
+                };
+                await Task.WhenAll(step1SecondRobotMoveTasks).ConfigureAwait(false);
+
+
+                //45도 회전 요청
+                await SetPCResponseBit((int)PCCommand.TurnAnlge45, true); // 45도 회전 요청
+                                                                          // 2) PLC -> PC : 특정 워드의 특정 비트가 ON 될 때까지 폴링
+                ResponseAck = await WaitForWordBitAsync(PlcDeviceType.D, SystemParam.PLCStatusAddress, (int)PLCStatusCommand.ResponseOK, true, _ackTimeout, _poll, token, "START_ACK").ConfigureAwait(false);
+                if (!ResponseAck)
+                    Logger.Instance.Print(Logger.LogLevel.INFO, $"PLC 응답 없음", true);
+                await SetPCResponseBit((int)PCCommand.TurnAnlge45, false); //45도 회전 완료 off
+
+
+                bool roatateAck = await WaitForWordBitAsync(PlcDeviceType.D, SystemParam.TurnTableAngleAddress, (int)PCCommand.TurnAnlge45, true, _doneTimeout, _poll, token, "roatateAck").ConfigureAwait(false);
+                if (!roatateAck)
+                    Logger.Instance.Print(Logger.LogLevel.INFO, $"PLC 응답 없음", true);
+                await SetPCResponseBit((int)PCCommand.TurnAnlge45, false);
+
+
+                //Step2
+                //리어 프론트 값 확인 필요
+                await ExecuteRobotCaptureSequence1Async(currentStep: "Step2", currentIndex: ModuleIndex.Module1,
+                      robotTeachedPosition: 2,
+                      carNumber: carNumber, distanceOffset: 700,
+                      camFocus: (float)70, acquisitionAngle: AcquisitionAngle.Angle_0,
+                      firstReceiveCheckString: "2,1,1",
+                      secondReceiveCheckingString: "2,1,2",
+                      homeReceiveCheckingString: "2,1,0",
+                      firstRobotCommand: "5003",
+                      homeRobotCommand: "5004",
+                      firstInfraredPositionName: "Right3",
+                      secondInfraredPositionName: "Right4",
+                      token: token);
+
+
+
+                await ExecuteRobotCaptureSequence1Async(currentStep: "Step2", currentIndex: ModuleIndex.Module3,
+                                      robotTeachedPosition: 2,
+                                      carNumber: carNumber, distanceOffset: 700,
+                                      camFocus: (float)70, acquisitionAngle: AcquisitionAngle.Angle_0,
+                                      firstReceiveCheckString: "2,3,1",
+                                      secondReceiveCheckingString: "2,3,2",
+                                      homeReceiveCheckingString: "2,3,0",
+                                      firstRobotCommand: "5004",
+                                      homeRobotCommand: "5005",
+                                      firstInfraredPositionName: "Left4",
+                                      secondInfraredPositionName: "Left3",
+                                      token: token);
+
+
+                var step2RobotMoveTasks_2 = new List<Task>();
+
+                //2번 로봇 이동
+                step2RobotMoveTasks_2.Add(ExecuteRobotCaptureSequence2Async(currentStep: "Step2", currentIndex: ModuleIndex.Module2,
+                                      robotTeachedPosition: 1,
+                                      carNumber: carNumber, distanceOffset: 845,
+                                      heightOffset: 800,
+                                      distanceFront: distanceRear,
+                                      camFocus: (float)70, acquisitionAngle: AcquisitionAngle.Angle_0,
+                                      firstReceiveCheckString: "2,2,1",
+                                      secondReceiveCheckString: "2,2,2",
+                                      thirdReceivingCheckString: "2,2,3",
+                                      fourthReceivingCheckString: "2,2,4",
+                                      homeReceiveCheckingString: "2,2,0",
+                                      homeRobotCommand: "5004",
+                                      firstRobotCommand: "5002",
+                                      secondRobotCommand: "5003",
+                                      firstInfraredPositionName: "TopRear1",
+                                      secondInfraredPositionName: "TopRear2",
+                                      token: token));
+
+                //4번 로봇 이동
+                step2RobotMoveTasks_2.Add(ExecuteRobotCaptureSequence2Async(currentStep: "Step2", currentIndex: ModuleIndex.Module4,
+                                      robotTeachedPosition: 1,
+                                      carNumber: carNumber,
+                                      distanceOffset: 755,
+                                      heightOffset: 800, distanceFront: distanceFront,
+                                      camFocus: (float)70, acquisitionAngle: AcquisitionAngle.Angle_0,
+                                      firstReceiveCheckString: "2,4,1",
+                                      secondReceiveCheckString: "2,4,2",
+                                      thirdReceivingCheckString: "2,4,3",
+                                      fourthReceivingCheckString: "2,4,4",
+                                      homeReceiveCheckingString: "2,4,0",
+                                      homeRobotCommand: "5004",
+                                      firstRobotCommand: "5002",
+                                      secondRobotCommand: "5003",
+                                      firstInfraredPositionName: "TopFront1",
+                                      secondInfraredPositionName: "TopFront2",
+                                      token: token));
+
+                await Task.WhenAll(step2RobotMoveTasks_2).ConfigureAwait(false);
+                Logger.Instance.Print(Logger.LogLevel.INFO, "Step 2 로봇 촬영 완료", true);
+
+
+
+                //180도 회전 요청
+                await SetPCResponseBit((int)PCCommand.TurnAnlge180, true); // 180도 회전 요청
+                                                                           // 2) PLC -> PC : 특정 워드의 특정 비트가 ON 될 때까지 폴링
+                ResponseAck = await WaitForWordBitAsync(PlcDeviceType.D, SystemParam.PLCStatusAddress, (int)PLCStatusCommand.ResponseOK, true, _ackTimeout, _poll, token, "START_ACK").ConfigureAwait(false);
+                if (!ResponseAck)
+                    Logger.Instance.Print(Logger.LogLevel.INFO, $"PLC 응답 없음", true);
+                await SetPCResponseBit((int)PCCommand.TurnAnlge180, false); //45도 회전 완료 off
+
+                roatateAck = await WaitForWordBitAsync(PlcDeviceType.D, SystemParam.TurnTableAngleAddress, (int)PCCommand.TurnAnlge0, true, _doneTimeout, _poll, token, "roatateAck").ConfigureAwait(false);
+                if (!roatateAck)
+                    Logger.Instance.Print(Logger.LogLevel.INFO, $"PLC 응답 없음", true);
+                await SetPCResponseBit((int)PCCommand.TurnAnlge180, false);
+
+                bool isCarExit = await WaitForWordBitAsync(PlcDeviceType.D, SystemParam.PLCStatusAddress, (int)PLCStatusCommand.CarExitSignal, true, _doneTimeout, _poll, token, "CAREXIT_ACK").ConfigureAwait(false);
+                if (!isCarExit)
+                    Logger.Instance.Print(Logger.LogLevel.INFO, $"차량 출차 응답없음", true);
+                await SetPCResponseBit((int)PCCommand.ResponseOK, true);
+
+                Logger.Instance.Print(Logger.LogLevel.INFO, $"{carNumber} 차량 검사 시퀀스 종료", true);
+
+
+            }
+            catch (TaskCanceledException)
+            {
+                Logger.Instance.Print(Logger.LogLevel.INFO, "중단 요청으로 중단 되었습니다.", true);
+            }
+            catch (Exception ex)
+            {
+                Logger.Instance.Print(Logger.LogLevel.INFO, $"오류로 중단 되었습니다. 예외: {ex.Message}", true);
+            }
+            finally
+            {
+                _IsInspectionRunning = false;
+                _LightCurtain.Start(SystemParam.LightCurtainHeightOffset);
+
+                //_RobotServer.Stop();
+                //await Task.Delay(3000);
+                //if(IsOnlineMode)
+                //    await _RobotServer.StartAsync(); //비동기 시작
+
+            }
+
+        }
+
 
         private async Task RunningMainLogicTask(string carNumber, CancellationToken token)
         {
             try
             {
-                if(!_IsPLCAutoMode)
+                if (!_IsPLCAutoMode)
                 {
                     Logger.Instance.Print(Logger.LogLevel.WARN, "PLC가 AutoMode가 아닙니다.", true);
                     return;
@@ -763,7 +1686,7 @@ namespace PRND_InfraredCapture.Models
 
                 await Task.Delay(_AfterMovingDelay);
 
-                await StartCaptureImage(currentIndex, camFocus, _InfraredFrameCount, acquisitionAngle, carNumber,$"{firstInfraredPositionName}");
+                await StartCaptureImage(currentIndex, camFocus, _InfraredFrameCount, acquisitionAngle, carNumber, $"{firstInfraredPositionName}");
                 Logger.Instance.Print(Logger.LogLevel.INFO, $"{currentStep} {currentIndexString}_{carNumber}_{firstInfraredPositionName} 열화상 이미지 촬영 시작", true);
                 //await Task.Delay(1000);
 
@@ -777,7 +1700,7 @@ namespace PRND_InfraredCapture.Models
 
                 await Task.Delay(_AfterMovingDelay);
 
-                await StartCaptureImage(currentIndex, camFocus, _InfraredFrameCount, AcquisitionAngle.Angle_0, carNumber,$"{secondInfraredPositionName}");
+                await StartCaptureImage(currentIndex, camFocus, _InfraredFrameCount, AcquisitionAngle.Angle_0, carNumber, $"{secondInfraredPositionName}");
                 Logger.Instance.Print(Logger.LogLevel.INFO, $"{currentStep} {currentIndexString}_{carNumber}_{secondInfraredPositionName} 열화상 이미지 촬영 시작", true);
                 //await Task.Delay(1000);
 
@@ -1202,9 +2125,9 @@ namespace PRND_InfraredCapture.Models
                         _CamController.ReadyCapture(index, focus);
                         await Task.Delay(1000);
                         _CamController.CaptureImage(index, framecnt, SystemParam.ImageDataSavePath, angle, carNumber, positionName);
-                        if(SystemParam.IsUsingLight)
+                        if (SystemParam.IsUsingLight)
                             await TurnOnLight(index, triggerAddress, statusAddress);
-                        await Task.Delay(1000);
+                        await Task.Delay(_CaptureDelay);
                     }
                 }
                 catch (Exception ex)
@@ -1219,7 +2142,7 @@ namespace PRND_InfraredCapture.Models
             }
         }
 
-        public async Task<bool> StartCaptureImageWithAsync(ModuleIndex index, float focus,int framecnt, AcquisitionAngle angle,string carNumber, string positionName)
+        public async Task<bool> StartCaptureImageWithAsync(ModuleIndex index, float focus, int framecnt, AcquisitionAngle angle, string carNumber, string positionName)
         {
             await _captureGate.WaitAsync().ConfigureAwait(false);
             try
@@ -1268,7 +2191,7 @@ namespace PRND_InfraredCapture.Models
                 {
                     _CamController.ReadyCapture(index, focus);
                     Task.Delay(1000).Wait();
-                    _CamController.CaptureImage(index, framecnt, SystemParam.ImageDataSavePath, angle,"NoCarNumber","NoPosition");
+                    _CamController.CaptureImage(index, framecnt, SystemParam.ImageDataSavePath, angle, "NoCarNumber", "NoPosition");
                 }
             }
             catch (Exception ex)
@@ -1327,7 +2250,7 @@ namespace PRND_InfraredCapture.Models
             try
             {
                 for (int i = 0; i < SystemParam.CamPathList.Count; i++)
-                    _ = StartCaptureImage((ModuleIndex)i, 100, 240, AcquisitionAngle.Angle_0,"NoCarNumber", "NoPositionName");
+                    _ = StartCaptureImage((ModuleIndex)i, 100, 240, AcquisitionAngle.Angle_0, "NoCarNumber", "NoPositionName");
             }
             catch (Exception ex)
             {
@@ -1529,6 +2452,7 @@ namespace PRND_InfraredCapture.Models
         }
 
         private int GetLightTriggerAddress(ModuleIndex i)
+
         {
             switch (i)
             {

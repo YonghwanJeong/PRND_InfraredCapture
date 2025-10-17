@@ -373,28 +373,28 @@ namespace CP.OptrisCam.models
                         SaveAsRawFloatBigEndian(rawSavePath, rotated);
 
 
-                        // Process & save (example: BMP)
-                        imageBuilder.setThermalFrame(frame.Frame);
-                        imageBuilder.convertTemperatureToPaletteImage();
+                        //// Process & save (example: BMP)
+                        //imageBuilder.setThermalFrame(frame.Frame);
+                        //imageBuilder.convertTemperatureToPaletteImage();
 
-                        byte[] image = new byte[imageBuilder.getImageSizeInBytes()];
-                        imageBuilder.copyImageDataTo(image, image.Length);
+                        //byte[] image = new byte[imageBuilder.getImageSizeInBytes()];
+                        //imageBuilder.copyImageDataTo(image, image.Length);
 
-                        using var bitmap = new Bitmap(width, height, System.Drawing.Imaging.PixelFormat.Format24bppRgb);
-                        var rectangle = new System.Drawing.Rectangle(0, 0, width, height);
-                        var bitmapData = bitmap.LockBits(rectangle, ImageLockMode.ReadWrite, bitmap.PixelFormat);
-                        System.Runtime.InteropServices.Marshal.Copy(image, 0, bitmapData.Scan0, image.Length);
-                        bitmap.UnlockBits(bitmapData);
+                        //using var bitmap = new Bitmap(width, height, System.Drawing.Imaging.PixelFormat.Format24bppRgb);
+                        //var rectangle = new System.Drawing.Rectangle(0, 0, width, height);
+                        //var bitmapData = bitmap.LockBits(rectangle, ImageLockMode.ReadWrite, bitmap.PixelFormat);
+                        //System.Runtime.InteropServices.Marshal.Copy(image, 0, bitmapData.Scan0, image.Length);
+                        //bitmap.UnlockBits(bitmapData);
 
-                        if (_AcquisitionAngle == AcquisitionAngle.Angle_90)
-                            bitmap.RotateFlip(RotateFlipType.Rotate90FlipNone);
-                        else if (_AcquisitionAngle == AcquisitionAngle.Angle_180)
-                            bitmap.RotateFlip(RotateFlipType.Rotate180FlipNone);
-                        else if (_AcquisitionAngle == AcquisitionAngle.Angle_270)
-                            bitmap.RotateFlip(RotateFlipType.Rotate270FlipNone);
+                        //if (_AcquisitionAngle == AcquisitionAngle.Angle_90)
+                        //    bitmap.RotateFlip(RotateFlipType.Rotate90FlipNone);
+                        //else if (_AcquisitionAngle == AcquisitionAngle.Angle_180)
+                        //    bitmap.RotateFlip(RotateFlipType.Rotate180FlipNone);
+                        //else if (_AcquisitionAngle == AcquisitionAngle.Angle_270)
+                        //    bitmap.RotateFlip(RotateFlipType.Rotate270FlipNone);
 
-                        Directory.CreateDirectory(Path.GetDirectoryName(imageSavePath)!);
-                        bitmap.Save(imageSavePath, ImageFormat.Bmp);
+                        //Directory.CreateDirectory(Path.GetDirectoryName(imageSavePath)!);
+                        //bitmap.Save(imageSavePath, ImageFormat.Bmp);
                     }
                     catch(Exception ex)
                     {

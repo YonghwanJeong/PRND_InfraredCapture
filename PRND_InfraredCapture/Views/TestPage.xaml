@@ -32,7 +32,8 @@
         <StackPanel>
             <Button Content="{Binding OnOfflineBtnText}" Command="{Binding ControlOnOffLineCommand}" />
             <TextBox Text="{Binding CarNumber, Mode=TwoWay}"/>
-            <Button Content="Start Insepction" Command="{Binding InspectionStartCommand}"/>
+            <Button Content="Start Insepction_Type1" Command="{Binding InspectionStartCommand}"/>
+            <Button Content="Start Insepction_Type2" Command="{Binding InspectionStartCommandType2}"/>
             <Button Content="Stop Insepction" Command="{Binding InspectionStopCommand}"/>
             <CheckBox Content="Is UsingLight" IsChecked="{Binding IsUsingLight}"/>
             <Button Content="LightCurtain Start" Command="{Binding LightCurtainStartCommand}"/>

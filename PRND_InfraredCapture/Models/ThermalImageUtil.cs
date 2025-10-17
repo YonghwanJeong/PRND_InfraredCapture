@@ -102,7 +102,7 @@ namespace PRND_InfraredCapture.Models
             int width, int height,
             float normMin,       // 예: -5f (Δ°C)
             float normMax,       // 예:  +5f (Δ°C)
-            ref float maxDiff  
+            ref float maxDiff
             )
         {
             maxDiff = 0;
